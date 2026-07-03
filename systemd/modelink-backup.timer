@@ -1,0 +1,12 @@
+[Unit]
+Description=Modelink Backup Timer - daily workstation backup
+Documentation=https://github.com/modelink/backup
+
+[Timer]
+# Daily at 4 AM with random delay to avoid thundering herd
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=3600
+
+[Install]
+WantedBy=timers.target

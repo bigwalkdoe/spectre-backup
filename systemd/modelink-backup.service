@@ -1,0 +1,23 @@
+[Unit]
+Description=Modelink Backup - Encrypted versioned workstation backup
+Documentation=https://github.com/modelink/backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/modelink-backup.sh
+User=%u
+Group=%u
+Environment=HOME=%h
+Environment=XDG_CONFIG_HOME=%h/.config
+Environment=XDG_DATA_HOME=%h/.local/share
+Environment=XDG_STATE_HOME=%h/.local/state
+StandardOutput=journal
+StandardError=journal
+Nice=19
+IOSchedulingClass=3
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

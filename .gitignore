@@ -1,0 +1,8 @@
+# Don't track generated log/output files
+*.log
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
