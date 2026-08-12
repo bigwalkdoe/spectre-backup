@@ -211,6 +211,7 @@ fi
 
 RESTIC_ARGS=()
 RESTIC_ARGS+=(-r "$RESTIC_REPOSITORY")
+RESTIC_ARGS+=(-o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M")
 RESTIC_ARGS+=(--verbose)
 RESTIC_ARGS+=(--tag "modelink-backup")
 RESTIC_ARGS+=(--tag "workstation")
@@ -244,7 +245,7 @@ info "Filesystem backup complete"
 header "Phase 4: Repository integrity check"
 
 set +e
-restic -r "$RESTIC_REPOSITORY" check --no-lock 2>&1
+restic -r "$RESTIC_REPOSITORY" -o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M" check --no-lock 2>&1
 CHECK_EXIT=$?
 set -e
 
