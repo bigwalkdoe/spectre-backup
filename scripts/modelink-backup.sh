@@ -209,31 +209,51 @@ if [ -d "$DUMPS_DIR" ] && [ "$(ls -A "$DUMPS_DIR" 2>/dev/null)" ]; then
     info "Including pre-backup dumps in snapshot"
 fi
 
-RESTIC_ARGS=()
-RESTIC_ARGS+=(-r "$RESTIC_REPOSITORY")
-RESTIC_ARGS+=(-o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M")
-RESTIC_ARGS+=(--verbose)
-RESTIC_ARGS+=(--tag "modelink-backup")
-RESTIC_ARGS+=(--tag "workstation")
-RESTIC_ARGS+=(--host "$(hostname)")
+RESTIC_COMMON_ARGS=()
+RESTIC_COMMON_ARGS+=(-o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M")
+RESTIC_COMMON_ARGS+=(--verbose)
+RESTIC_COMMON_ARGS+=(--tag "modelink-backup")
+RESTIC_COMMON_ARGS+=(--tag "workstation")
+RESTIC_COMMON_ARGS+=(--host "$(hostname)")
 
 if [ -f "$EXCLUDE_FILE" ] && [ -s "$EXCLUDE_FILE" ]; then
-    RESTIC_ARGS+=(--exclude-file "$EXCLUDE_FILE")
+    RESTIC_COMMON_ARGS+=(--exclude-file "$EXCLUDE_FILE")
 fi
 
-RESTIC_ARGS+=(--exclude "$DUMPS_DIR") # exclude from general backup pattern scanning
+RESTIC_COMMON_ARGS+=(--exclude "$DUMPS_DIR") # exclude from general backup pattern scanning
 
 info "Starting backup of ${#BACKUP_TARGETS[@]} target paths..."
-info "Repository: $RESTIC_REPOSITORY"
 
-set +e
-restic "${RESTIC_ARGS[@]}" backup "${BACKUP_TARGETS[@]}" 2>&1
-BACKUP_EXIT=$?
-set -e
+REPO_FAILED=0
+run_repo_backup() {
+    local repo="$1" label="$2"
+    info "[$label] Starting backup to $repo"
+    set +e
+    local exit_code=0
+    for attempt in 1 2 3; do
+        info "[$label] Backup attempt $attempt/3"
+        restic -r "$repo" "${RESTIC_COMMON_ARGS[@]}" backup "${BACKUP_TARGETS[@]}" 2>&1
+        exit_code=$?
+        [ $exit_code -eq 0 ] && break
+        warn "[$label] Attempt $attempt failed (exit $exit_code); retrying in $((attempt * 300))s..."
+        sleep $((attempt * 300))
+    done
+    set -e
+    if [ $exit_code -ne 0 ]; then
+        REPO_FAILED=1
+        error "[$label] Restic backup failed after 3 attempts"
+    fi
+}
 
-if [ $BACKUP_EXIT -ne 0 ]; then
-    error "Restic backup failed with exit code $BACKUP_EXIT"
-    notify "Backup Failed" "Restic backup error (exit $BACKUP_EXIT)" "critical"
+if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+    run_repo_backup "$RESTIC_REPOSITORY_LOCAL" "local"
+else
+    warn "No local repository configured (RESTIC_REPOSITORY_LOCAL) - skipping local backup"
+fi
+run_repo_backup "$RESTIC_REPOSITORY" "drive"
+
+if [ $REPO_FAILED -ne 0 ]; then
+    notify "Backup Failed" "Restic backup error" "critical"
     exit 1
 fi
 
@@ -248,6 +268,19 @@ set +e
 restic -r "$RESTIC_REPOSITORY" -o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M" check --no-lock 2>&1
 CHECK_EXIT=$?
 set -e
+
+if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+    set +e
+    restic -r "$RESTIC_REPOSITORY_LOCAL" check --no-lock 2>&1
+    LOCAL_CHECK_EXIT=$?
+    set -e
+    if [ $LOCAL_CHECK_EXIT -ne 0 ]; then
+        error "Local repository integrity check FAILED"
+        notify "Backup Warning" "Local repository integrity check failed" "critical"
+    else
+        info "Local repository integrity check passed"
+    fi
+fi
 
 if [ $CHECK_EXIT -ne 0 ]; then
     error "Repository integrity check FAILED"
