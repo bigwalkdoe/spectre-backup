@@ -1,6 +1,6 @@
 [Unit]
-Description=Modelink Backup Timer - daily workstation backup
-Documentation=https://github.com/modelink/backup
+Description=fedora-back-up Timer - daily workstation backup
+Documentation=https://github.com/bigwalkdoe/fedora-back-up
 
 [Timer]
 # Daily at 4 AM with random delay to avoid thundering herd

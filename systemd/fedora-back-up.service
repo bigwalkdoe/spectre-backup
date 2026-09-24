@@ -1,12 +1,12 @@
 [Unit]
-Description=Modelink Backup - Encrypted versioned workstation backup
-Documentation=https://github.com/modelink/backup
+Description=fedora-back-up - Encrypted versioned workstation backup
+Documentation=https://github.com/bigwalkdoe/fedora-back-up
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/modelink-backup.sh
+ExecStart=%h/.local/bin/fedora-back-up.sh
 User=%u
 Group=%u
 Environment=HOME=%h

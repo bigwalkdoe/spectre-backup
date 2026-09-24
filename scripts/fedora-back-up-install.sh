@@ -1,13 +1,13 @@
 #!/bin/bash
 # ============================================================
-# Modelink Backup - Installer
+# fedora-back-up - Installer
 # ============================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/modelink-backup"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/modelink-backup"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 BIN_DIR="${XDG_DATA_HOME:-$HOME/.local}/bin"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
@@ -55,7 +55,7 @@ info "State/logs:    $STATE_DIR"
 # --- Step 3: Install scripts ---
 header "Step 3: Installing scripts"
 
-for script in modelink-backup.sh modelink-restore.sh modelink-verify.sh modelink-prune.sh; do
+for script in fedora-back-up.sh fedora-back-up-restore.sh fedora-back-up-verify.sh fedora-back-up-prune.sh; do
     src="$PROJECT_DIR/scripts/$script"
     dest="$BIN_DIR/$script"
     if [ -f "$src" ]; then
@@ -68,8 +68,8 @@ for script in modelink-backup.sh modelink-restore.sh modelink-verify.sh modelink
 done
 
 # Install symlink to main backup script for systemd
-ln -sf "$BIN_DIR/modelink-backup.sh" "$BIN_DIR/modelink-backup"
-info "Symlink: $BIN_DIR/modelink-backup -> $BIN_DIR/modelink-backup.sh"
+ln -sf "$BIN_DIR/fedora-back-up.sh" "$BIN_DIR/fedora-back-up"
+info "Symlink: $BIN_DIR/fedora-back-up -> $BIN_DIR/fedora-back-up.sh"
 
 # --- Step 4: Copy default config files ---
 header "Step 4: Creating configuration"
@@ -193,26 +193,26 @@ header "Step 9: Installing systemd service and timer"
 SYSTEMD_USER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/systemd/user"
 mkdir -p "$SYSTEMD_USER_DIR"
 
-cp "$PROJECT_DIR/systemd/modelink-backup.service" "$SYSTEMD_USER_DIR/"
-cp "$PROJECT_DIR/systemd/modelink-backup.timer" "$SYSTEMD_USER_DIR/"
+cp "$PROJECT_DIR/systemd/fedora-back-up.service" "$SYSTEMD_USER_DIR/"
+cp "$PROJECT_DIR/systemd/fedora-back-up.timer" "$SYSTEMD_USER_DIR/"
 systemctl --user daemon-reload
 
-if systemctl --user is-enabled modelink-backup.timer &>/dev/null 2>&1; then
+if systemctl --user is-enabled fedora-back-up.timer &>/dev/null 2>&1; then
     info "Timer already enabled"
 else
-    systemctl --user enable modelink-backup.timer
+    systemctl --user enable fedora-back-up.timer
     info "Timer enabled"
 fi
 
-if systemctl --user is-active modelink-backup.timer &>/dev/null 2>&1; then
+if systemctl --user is-active fedora-back-up.timer &>/dev/null 2>&1; then
     info "Timer already active"
 else
-    systemctl --user start modelink-backup.timer
+    systemctl --user start fedora-back-up.timer
     info "Timer started"
 fi
 
 info "Timer status:"
-systemctl --user status modelink-backup.timer --no-pager 2>&1 | head -10
+systemctl --user status fedora-back-up.timer --no-pager 2>&1 | head -10
 
 # --- Step 10: Test run ---
 header "Step 10: Performing test run"
@@ -228,7 +228,7 @@ case "${testanswer:-Y}" in
             backup \
             "$HOME/.bashrc" \
             "$HOME/.gitconfig" \
-            "$HOME/.config/modelink-backup" \
+            "$HOME/.config/fedora-back-up" \
             2>&1 | tail -20
         info "Test backup complete"
         ;;
@@ -240,7 +240,7 @@ esac
 # --- Done ---
 header "Installation Complete"
 
-echo -e "${GREEN}${BOLD}Modelink Backup System installed!${NC}"
+echo -e "${GREEN}${BOLD}fedora-back-up installed!${NC}"
 echo ""
 echo -e "  Config directory:  ${BOLD}$CONFIG_DIR${NC}"
 echo -e "  Log directory:     ${BOLD}$STATE_DIR${NC}"
@@ -251,9 +251,9 @@ echo -e "Next steps:"
 echo -e "  1. Edit ${BOLD}$CONFIG_DIR/.env${NC} if needed"
 echo -e "  2. Edit ${BOLD}$CONFIG_DIR/include.conf${NC} to add/remove backup paths"
 echo -e "  3. Edit ${BOLD}$CONFIG_DIR/exclude.conf${NC} to customize exclusions"
-echo -e "  4. Run ${BOLD}$BIN_DIR/modelink-backup.sh${NC} for a full backup"
-echo -e "  5. Run ${BOLD}$BIN_DIR/modelink-restore.sh${NC} to test restoration"
+echo -e "  4. Run ${BOLD}$BIN_DIR/fedora-back-up.sh${NC} for a full backup"
+echo -e "  5. Run ${BOLD}$BIN_DIR/fedora-back-up-restore.sh${NC} to test restoration"
 echo ""
 echo -e "  Timer runs daily at 04:00. Check with:"
-echo -e "    ${BOLD}systemctl --user status modelink-backup.timer${NC}"
-echo -e "    ${BOLD}journalctl --user -u modelink-backup.service -f${NC}"
+echo -e "    ${BOLD}systemctl --user status fedora-back-up.timer${NC}"
+echo -e "    ${BOLD}journalctl --user -u fedora-back-up.service -f${NC}"

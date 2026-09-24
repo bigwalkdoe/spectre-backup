@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Modelink Backup - Main Backup Engine
+# fedora-back-up - Main Backup Engine
 # Encrypted, versioned workstation backup via Restic + rclone
 # ============================================================
 set -euo pipefail
@@ -9,15 +9,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- Configuration ---
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/modelink-backup"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
 if [ -f "$CONFIG_DIR/.env" ]; then
     set -a; source "$CONFIG_DIR/.env"; set +a
 elif [ -f "$PROJECT_DIR/config/.env.example" ]; then
     set -a; source "$PROJECT_DIR/config/.env.example"; set +a
 fi
 
-LOG_DIR="${LOG_DIR:-$HOME/.local/state/modelink-backup}"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/modelink-backup"
+LOG_DIR="${LOG_DIR:-$HOME/.local/state/fedora-back-up}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
 INCLUDE_FILE="${INCLUDE_FILE:-$CONFIG_DIR/include.conf}"
 EXCLUDE_FILE="${EXCLUDE_FILE:-$CONFIG_DIR/exclude.conf}"
@@ -212,7 +212,7 @@ fi
 RESTIC_COMMON_ARGS=()
 RESTIC_COMMON_ARGS+=(-o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M")
 RESTIC_COMMON_ARGS+=(--verbose)
-RESTIC_COMMON_ARGS+=(--tag "modelink-backup")
+RESTIC_COMMON_ARGS+=(--tag "fedora-back-up")
 RESTIC_COMMON_ARGS+=(--tag "workstation")
 RESTIC_COMMON_ARGS+=(--host "$(hostname)")
 
@@ -324,12 +324,12 @@ notify "✓ Backup Successful" "Duration: $DURATION_STR | Snapshot: $SNAPSHOT_ID
 # ============================================================
 header "Phase 5: Pruning old snapshots"
 
-if [ -f "$SCRIPT_DIR/modelink-prune.sh" ]; then
+if [ -f "$SCRIPT_DIR/fedora-back-up-prune.sh" ]; then
     info "Running prune script..."
-    bash "$SCRIPT_DIR/modelink-prune.sh" --no-notify || warn "Prune completed with warnings"
-elif [ -f "$BIN_DIR/modelink-prune.sh" ]; then
+    bash "$SCRIPT_DIR/fedora-back-up-prune.sh" --no-notify || warn "Prune completed with warnings"
+elif [ -f "$BIN_DIR/fedora-back-up-prune.sh" ]; then
     info "Running prune script..."
-    bash "$BIN_DIR/modelink-prune.sh" --no-notify || warn "Prune completed with warnings"
+    bash "$BIN_DIR/fedora-back-up-prune.sh" --no-notify || warn "Prune completed with warnings"
 else
     warn "Prune script not found - skipping automatic pruning"
 fi

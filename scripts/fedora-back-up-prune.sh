@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Modelink Backup - Snapshot Pruning
+# fedora-back-up - Snapshot Pruning
 #
 # Enforces retention policy:
 #   Hourly:    last 24
@@ -10,16 +10,16 @@
 #   Yearly:    keep all (no limit specified)
 #
 # Usage:
-#   modelink-prune.sh           # Prune and notify
-#   modelink-prune.sh --dry-run # Preview only
-#   modelink-prune.sh --no-notify # Silent (for automated runs)
+#   fedora-back-up-prune.sh           # Prune and notify
+#   fedora-back-up-prune.sh --dry-run # Preview only
+#   fedora-back-up-prune.sh --no-notify # Silent (for automated runs)
 # ============================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/modelink-backup"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
-LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/modelink-backup"
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
@@ -159,5 +159,5 @@ info "Repository size:     $REPO_SIZE"
 
 # --- Notify ---
 if [ "$SEND_NOTIFY" = true ] && [ "$DRY_RUN" = false ] && command -v notify-send &>/dev/null; then
-    notify-send -u low "Modelink Backup" "Pruning complete: $SNAPSHOTS_LEFT snapshots, $REPO_SIZE"
+    notify-send -u low "fedora-back-up" "Pruning complete: $SNAPSHOTS_LEFT snapshots, $REPO_SIZE"
 fi

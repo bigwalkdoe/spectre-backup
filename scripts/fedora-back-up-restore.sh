@@ -1,19 +1,19 @@
 #!/bin/bash
 # ============================================================
-# Modelink Backup - Restore / Disaster Recovery
+# fedora-back-up - Restore / Disaster Recovery
 #
 # Usage:
-#   modelink-restore.sh                    # Restore latest snapshot
-#   modelink-restore.sh --list             # List snapshots
-#   modelink-restore.sh --snapshot <id>    # Restore specific snapshot
-#   modelink-restore.sh --dry-run          # Preview restore
+#   fedora-back-up-restore.sh                    # Restore latest snapshot
+#   fedora-back-up-restore.sh --list             # List snapshots
+#   fedora-back-up-restore.sh --snapshot <id>    # Restore specific snapshot
+#   fedora-back-up-restore.sh --dry-run          # Preview restore
 # ============================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/modelink-backup"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/modelink-backup"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'

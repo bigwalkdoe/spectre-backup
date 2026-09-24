@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Modelink Backup - Repository Verification
+# fedora-back-up - Repository Verification
 #
 # Runs integrity checks on the Restic repository.
 # Full verification (--full) reads all data and checks pack files.
@@ -9,9 +9,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/modelink-backup"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
-LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/modelink-backup"
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
@@ -46,7 +46,7 @@ LOG_FILE="$LOG_DIR/verify-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # --- Pre-flight ---
-header "Modelink Backup - Repository Verification"
+header "fedora-back-up - Repository Verification"
 
 if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then
     error "Restic password file not found: $RESTIC_PASSWORD_FILE"
@@ -127,7 +127,7 @@ if [ "$FULL_CHECK" = true ]; then
     info "Monthly full verification completed"
     if [ $CHECK_EXIT -eq 0 ]; then
         if command -v notify-send &>/dev/null; then
-            notify-send -u normal "Modelink Backup" "Monthly verification passed ($SNAPSHOT_COUNT snapshots, ${DURATION}s)"
+            notify-send -u normal "fedora-back-up" "Monthly verification passed ($SNAPSHOT_COUNT snapshots, ${DURATION}s)"
         fi
     fi
 fi
