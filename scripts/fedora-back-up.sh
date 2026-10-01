@@ -21,7 +21,11 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
 INCLUDE_FILE="${INCLUDE_FILE:-$CONFIG_DIR/include.conf}"
 EXCLUDE_FILE="${EXCLUDE_FILE:-$CONFIG_DIR/exclude.conf}"
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:gdrive:ModelinkBackups/workstation}"
+# # The remote path was rclone:fedora-back-up:, which has been
+# deleted. Repointed to the current backup folder. Override with the
+# RESTIC_REPOSITORY environment variable rather than editing this line.
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
+RESTIC_REMOTE="fedora-back-up"
 
 NOTIFY_ENABLED="${NOTIFY_ENABLED:-true}"
 NOTIFY_DESKTOP="${NOTIFY_DESKTOP:-true}"
@@ -88,14 +92,44 @@ for cmd in restic rclone; do
     fi
 done
 
+# Does the offsite leg have a usable backend?
+#
+# This used to `exit 1` when the rclone remote was missing. The local repository
+# is not backed up until much later in the run, so an unreachable offsite remote
+# silently cancelled the local backup too: snapshots in RESTIC_REPOSITORY_LOCAL
+# stopped on 11 September while every run after that failed here with "rclone
+# remote gdrive not found". A remote that cannot be reached is a degradation, not
+# a reason to also lose the local copy.
+#
+# Local snapshots stopped on 24 September, when the remote folder was deleted and
+# the configured path stopped resolving.
+#
+# The run still exits non-zero overall and still notifies, so a broken offsite leg
+# cannot pass for a healthy backup.
+REMOTE_AVAILABLE=1
 BACKEND="${RESTIC_REPOSITORY%%:*}"
 if [ "$BACKEND" = "rclone" ]; then
     REMOTE="${RESTIC_REPOSITORY#*:}"
     REMOTE_NAME="${REMOTE%%:*}"
     if ! rclone listremotes 2>/dev/null | grep -q "^${REMOTE_NAME}:"; then
-        error "rclone remote '$REMOTE_NAME:' not configured"
-        notify "Backup Failed" "rclone remote $REMOTE_NAME not found" "critical"
-        exit 1
+        error "rclone remote '$REMOTE_NAME:' is not defined -- offsite leg will be SKIPPED"
+        warn "The local repository will still be backed up."
+        warn "Create the remote with: rclone config   (n) new remote -> $REMOTE_NAME -> Storage: drive"
+        notify "Backup Degraded" "rclone remote $REMOTE_NAME not defined; local backup still running" "warning"
+        REMOTE_AVAILABLE=0
+    elif ! rclone lsd "${REMOTE_NAME}:" >/dev/null 2>&1; then
+        # Defined is not the same as usable. A remote can exist in the config with
+        # no OAuth token, which is exactly the current state: `rclone listremotes`
+        # listed it, so a presence-only check passed, and the run then failed deep
+        # inside restic with "empty token found" instead of naming the cause here.
+        # One directory listing distinguishes the two, and takes the same trip to
+        # the provider as the backup itself would.
+        error "rclone remote '$REMOTE_NAME:' is defined but not usable -- offsite leg will be SKIPPED"
+        warn "The local repository will still be backed up."
+        warn "Most often an expired or missing OAuth token. Re-authorise with:"
+        warn "    rclone config reconnect ${REMOTE_NAME}:"
+        notify "Backup Degraded" "rclone remote $REMOTE_NAME needs re-authorising; local backup still running" "warning"
+        REMOTE_AVAILABLE=0
     fi
 fi
 
@@ -225,6 +259,35 @@ RESTIC_COMMON_ARGS+=(--exclude "$DUMPS_DIR") # exclude from general backup patte
 info "Starting backup of ${#BACKUP_TARGETS[@]} target paths..."
 
 REPO_FAILED=0
+# Make sure a repository exists before backing up to it.
+#
+# There was no `restic init` anywhere in this script, so a repository that did not
+# yet exist failed at the first backup with "unable to open config file". That is
+# exactly the state of a newly created offsite folder: the remote was created,
+# nothing was ever initialised in it, and the first run would have failed for a
+# third reason after the path was corrected and the token re-authorised.
+#
+# Idempotent in both directions: an existing repository is left alone, and a repo
+# that exists but cannot be read (a wrong password, say) is reported rather than
+# being re-initialised over the top of.
+ensure_repo_initialized() {
+    local repo="$1" label="$2"
+    if restic -r "$repo" cat config >/dev/null 2>&1; then
+        return 0
+    fi
+    info "[$label] No repository at $repo -- initialising"
+    if restic -r "$repo" init >/dev/null 2>&1; then
+        info "[$label] Repository initialised"
+        return 0
+    fi
+    if restic -r "$repo" cat config >/dev/null 2>&1; then
+        # init reported failure but the repository is readable: it existed already.
+        return 0
+    fi
+    error "[$label] Cannot initialise or read a repository at $repo"
+    return 1
+}
+
 run_repo_backup() {
     local repo="$1" label="$2"
     info "[$label] Starting backup to $repo"
@@ -245,15 +308,32 @@ run_repo_backup() {
     fi
 }
 
+# Local first: it is the copy that survives a failed upload.
 if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+    ensure_repo_initialized "$RESTIC_REPOSITORY_LOCAL" "local" || REPO_FAILED=1
     run_repo_backup "$RESTIC_REPOSITORY_LOCAL" "local"
 else
     warn "No local repository configured (RESTIC_REPOSITORY_LOCAL) - skipping local backup"
 fi
-run_repo_backup "$RESTIC_REPOSITORY" "drive"
+
+OFFSITE_SKIPPED=0
+if [ "$REMOTE_AVAILABLE" -eq 1 ]; then
+    ensure_repo_initialized "$RESTIC_REPOSITORY" "drive" || REPO_FAILED=1
+    run_repo_backup "$RESTIC_REPOSITORY" "drive"
+else
+    warn "Offsite leg skipped: the rclone remote is not configured"
+    OFFSITE_SKIPPED=1
+    REPO_FAILED=1
+fi
 
 if [ $REPO_FAILED -ne 0 ]; then
-    notify "Backup Failed" "Restic backup error" "critical"
+    if [ "$OFFSITE_SKIPPED" -eq 1 ] && [ "$REPO_FAILED" -eq 1 ]; then
+        # Only the offsite leg was skipped; the local backup is fine. Reporting
+        # this as a restic error points whoever reads it at the wrong subsystem.
+        notify "Backup Degraded" "Local backup succeeded; offsite leg skipped (rclone remote not configured)" "warning"
+    else
+        notify "Backup Failed" "Restic backup error" "critical"
+    fi
     exit 1
 fi
 

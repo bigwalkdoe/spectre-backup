@@ -38,7 +38,10 @@ done
 if [ -f "$CONFIG_DIR/.env" ]; then
     set -a; source "$CONFIG_DIR/.env"; set +a
 fi
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:gdrive:ModelinkBackups/workstation}"
+# This previously defaulted to a bare "fedora-back-up", which restic resolves
+# as a directory relative to the working directory -- so the verification was
+# checking a path that was never a repository. It must name a real backend.
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
 export RESTIC_PASSWORD_COMMAND="cat $RESTIC_PASSWORD_FILE"
 
 mkdir -p "$LOG_DIR"

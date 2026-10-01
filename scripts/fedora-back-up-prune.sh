@@ -49,7 +49,10 @@ done
 if [ -f "$CONFIG_DIR/.env" ]; then
     set -a; source "$CONFIG_DIR/.env"; set +a
 fi
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:gdrive:ModelinkBackups/workstation}"
+# # The remote path was rclone:fedora-back-up:, which has been
+# deleted. Repointed to the current backup folder. Override with the
+# RESTIC_REPOSITORY environment variable rather than editing this line.
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
 export RESTIC_PASSWORD_COMMAND="cat $RESTIC_PASSWORD_FILE"
 
 mkdir -p "$LOG_DIR"

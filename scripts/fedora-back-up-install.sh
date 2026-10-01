@@ -128,14 +128,14 @@ header "Step 6: Validating Google Drive access"
 
 if check_cmd rclone && rclone listremotes 2>/dev/null | grep -q "^gdrive:"; then
     info "Testing Google Drive access..."
-    if rclone mkdir "gdrive:ModelinkBackups" 2>/dev/null; then
-        info "Created/verified: gdrive:ModelinkBackups"
-        if rclone mkdir "gdrive:ModelinkBackups/workstation" 2>/dev/null; then
-            info "Created/verified: gdrive:ModelinkBackups/workstation"
+    if rclone mkdir "fedora-back-up:" 2>/dev/null; then
+        info "Created/verified: fedora-back-up:"
+        if rclone mkdir "fedora-back-up:" 2>/dev/null; then
+            info "Created/verified: fedora-back-up:"
         fi
         info "Upload test: writing test file..."
-        echo "test-$(date)" | rclone rcat "gdrive:ModelinkBackups/workstation/.write-test" 2>/dev/null
-        rclone delete "gdrive:ModelinkBackups/workstation/.write-test" 2>/dev/null
+        echo "test-$(date)" | rclone rcat "fedora-back-up:.write-test" 2>/dev/null
+        rclone delete "fedora-back-up:.write-test" 2>/dev/null
         info "Upload test passed"
     else
         error "Cannot access Google Drive. Check rclone configuration."
@@ -178,7 +178,7 @@ fi
 # --- Step 8: Initialize Restic repository ---
 header "Step 8: Initializing Restic repository"
 
-REPO="rclone:gdrive:ModelinkBackups/workstation"
+REPO="rclone:fedora-back-up:"
 if RESTIC_PASSWORD_COMMAND="cat $CONFIG_DIR/password" restic -r "$REPO" snapshots 2>/dev/null; then
     info "Restic repository already initialized"
 else
