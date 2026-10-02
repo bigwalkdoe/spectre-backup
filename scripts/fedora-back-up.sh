@@ -17,6 +17,118 @@ elif [ -f "$PROJECT_DIR/config/.env.example" ]; then
 fi
 
 LOG_DIR="${LOG_DIR:-$HOME/.local/state/fedora-back-up}"
+
+health_check() {
+    local out_json=0
+    local rc_ok=0 rc_deg=1 rc_fail=2
+    local overall=$rc_ok
+    for arg in "$@"; do
+        case "$arg" in
+            --json) out_json=1 ;;
+        esac
+    done
+
+    local now=$(date -u +%s)
+    local local_newest_ts="" local_newest_iso=""
+    local off_newest_ts="" off_newest_iso=""
+    local local_count=0 off_count=0
+    local local_age_h=999999 off_age_h=999999
+    local local_free_g=0
+    local df_free_kb=0
+
+    # Local
+    if [ -n "${RESTIC_PASSWORD_FILE:-}" ] && [ -d "${RESTIC_REPOSITORY_LOCAL:-}" ] 2>/dev/null || [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+        local_newest_iso=$(RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" timeout 180 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq -r '.[-1].time // empty' 2>/dev/null || true)
+        local_count=$(RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" timeout 180 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
+    fi
+    if [ -n "$local_newest_iso" ]; then
+        local_newest_ts=$(date -u -d "$local_newest_iso" +%s 2>/dev/null || date -u +%s)
+        local_age_h=$(( (now - local_newest_ts) / 3600 ))
+    fi
+
+    # Offsite
+    if [ -n "${RESTIC_PASSWORD_FILE:-}" ]; then
+        off_newest_iso=$(RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" timeout 180 restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq -r '.[-1].time // empty' 2>/dev/null || true)
+        off_count=$(RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" timeout 180 restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
+    fi
+    if [ -n "$off_newest_iso" ]; then
+        off_newest_ts=$(date -u -d "$off_newest_iso" +%s 2>/dev/null || date -u +%s)
+        off_age_h=$(( (now - off_newest_ts) / 3600 ))
+    fi
+
+    # Disk free for local repo root
+    if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+        local_repo_root=$(dirname "$RESTIC_REPOSITORY_LOCAL") || true
+        [ -z "$local_repo_root" ] && local_repo_root="/backups"
+        df_free_kb=$(df -P "$local_repo_root" 2>/dev/null | awk 'NR==2 {print $4}')
+        if [ -n "$df_free_kb" ] && [[ "$df_free_kb" =~ ^[0-9]+$ ]]; then
+            local_free_g=$(( df_free_kb / 1024 / 1024 ))
+        fi
+    fi
+
+    # Quota for offsite (rclone)
+    local used_pct=""
+    if command -v rclone >/dev/null 2>&1; then
+        used_pct=$(timeout 60 rclone about "${REMOTE_NAME:-fedora-back-up}:" 2>/dev/null | grep -oP 'Used:.*?([0-9.]+)%' | grep -oP '([0-9.]+)%' | tr -d '%' | head -1 || true)
+    fi
+
+    local local_status="ok" off_status="ok" disk_status="ok" quota_status="ok" locks_status="ok"
+
+    # SLOs: local <1h ok, >2h deg, >24h fail
+    if [ $local_age_h -gt 24 ]; then local_status="fail"; overall=$rc_fail
+    elif [ $local_age_h -gt 2 ]; then local_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
+    fi
+    # offsite <24h ok, >36h deg, >72h fail
+    if [ $off_age_h -gt 72 ]; then off_status="fail"; overall=$rc_fail
+    elif [ $off_age_h -gt 36 ]; then off_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
+    fi
+    # disk
+    if [ $local_free_g -lt 15 ]; then disk_status="fail"; overall=$rc_fail
+    elif [ $local_free_g -lt 25 ]; then disk_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
+    fi
+    # quota
+    if [ -n "$used_pct" ] && [[ "$used_pct" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        local up=${used_pct%.*}
+        if [ "$up" -gt 95 ] 2>/dev/null; then quota_status="fail"; overall=$rc_fail
+        elif [ "$up" -gt 85 ] 2>/dev/null; then quota_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
+        fi
+    fi
+
+    if [ $out_json -eq 1 ]; then
+        cat <<JSON
+{
+  "status": "$( [ $overall -eq 0 ] && echo ok || ([ $overall -eq 1 ] && echo degraded || echo failed) )",
+  "exit_code": $overall,
+  "local": {"count": $local_count, "newest_iso": "$local_newest_iso", "age_hours": $local_age_h, "status": "$local_status"},
+  "offsite": {"count": $off_count, "newest_iso": "$off_newest_iso", "age_hours": $off_age_h, "status": "$off_status"},
+  "disk_free_g": $local_free_g, "disk_status": "$disk_status",
+  "quota_used_pct": "${used_pct:-null}", "quota_status": "$quota_status",
+  "locks_status": "$locks_status"
+}
+JSON
+        return $overall
+    else
+        echo "health: $( [ $overall -eq 0 ] && echo OK || ([ $overall -eq 1 ] && echo DEGRADED || echo FAILED) )"
+        echo "  local:   count=$local_count age_h=$local_age_h status=$local_status (newest=$local_newest_iso)"
+        echo "  offsite: count=$off_count age_h=$off_age_h status=$off_status (newest=$off_newest_iso)"
+        echo "  disk:    free_g=$local_free_g status=$disk_status"
+        echo "  quota:   used_pct=${used_pct:-n/a} status=$quota_status"
+        return $overall
+    fi
+}
+
+
+
+# Auto-heal stale restic locks (resilience)
+heal_lock() {
+    local repo="$1" label="$2"
+    if [ -n "${repo:-}" ]; then
+        if timeout 60 restic -r "$repo" unlock --remove-all >/dev/null 2>&1; then
+            echo "locks-healed: $label" >> "$LOG_DIR/backup.log"
+        fi
+    fi
+}
+
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
 INCLUDE_FILE="${INCLUDE_FILE:-$CONFIG_DIR/include.conf}"
@@ -73,8 +185,18 @@ cleanup() {
 trap cleanup EXIT
 
 # ============================================================
-# Pre-flight checks
-# ============================================================
+
+
+# Health dispatch
+for arg in "$@"; do
+    case "$arg" in
+        --health|health)
+            health_check "$@"
+            exit $?
+            ;;
+    esac
+done
+
 header "Pre-flight checks"
 
 if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then
@@ -153,15 +275,19 @@ if [ "$PG_ENABLED" = "true" ] && command -v pg_dumpall &>/dev/null; then
 
     if command -v pg_isready &>/dev/null && pg_isready -h "$PG_HOST" -p "$PG_PORT" &>/dev/null; then
         info "Dumping all PostgreSQL databases..."
+        set +e
         PGPASSWORD="${PG_PASSWORD:-}" pg_dumpall \
             -h "$PG_HOST" -p "$PG_PORT" \
             -U "$PG_USER" \
-            --clean --if-exists \
-            2>/dev/null | gzip > "$PG_DUMP_FILE"
-
+            --clean --if-exists 2>/dev/null | gzip > "$PG_DUMP_FILE"
+        rc=${PIPESTATUS[0]:-${PIPESTATUS[1]:-1}}
+        set -e
         if [ -f "$PG_DUMP_FILE" ] && [ -s "$PG_DUMP_FILE" ]; then
             SIZE=$(du -h "$PG_DUMP_FILE" | cut -f1)
             info "PostgreSQL dump complete: $SIZE"
+        elif [ $rc -ne 0 ]; then
+            warn "PostgreSQL dump failed (exit $rc) — continuing without DB dump"
+            rm -f "$PG_DUMP_FILE"
         else
             warn "PostgreSQL dump produced empty output (no databases?)"
             rm -f "$PG_DUMP_FILE"
@@ -442,3 +568,20 @@ else
 fi
 
 exit 0
+
+
+
+# ============================================================
+# Health check
+# ============================================================
+
+
+
+
+
+
+
+
+
+heal_lock "$RESTIC_REPOSITORY_LOCAL" local
+heal_lock "$RESTIC_REPOSITORY" offsite
