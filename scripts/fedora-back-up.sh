@@ -21,6 +21,11 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
 INCLUDE_FILE="${INCLUDE_FILE:-$CONFIG_DIR/include.conf}"
 EXCLUDE_FILE="${EXCLUDE_FILE:-$CONFIG_DIR/exclude.conf}"
+# Offsite leg scope. The local and remote repositories do not have to carry the
+# same paths: the remote may be a target with a much smaller quota than the
+# disk it protects. When this file is absent the remote falls back to the full
+# local scope, so existing deployments are unaffected.
+INCLUDE_FILE_REMOTE="${INCLUDE_FILE_REMOTE:-$CONFIG_DIR/include-remote.conf}"
 # # The remote path was rclone:fedora-back-up:, which has been
 # deleted. Repointed to the current backup folder. Override with the
 # RESTIC_REPOSITORY environment variable rather than editing this line.
@@ -219,22 +224,43 @@ fi
 header "Phase 3: Restic filesystem backup"
 
 BACKUP_TARGETS=()
-if [ -f "$INCLUDE_FILE" ] && [ -s "$INCLUDE_FILE" ]; then
+# build_targets <include_file> -> populates TARGETS_OUT
+#
+# Split out because the two repositories can have different scopes. Duplicated
+# inline it was impossible to give the remote a smaller path set than local,
+# which is what a quota-limited offsite target needs.
+build_targets() {
+    local file="$1"
+    local -n out_ref="$2"
+    out_ref=()
+    [ -f "$file" ] && [ -s "$file" ] || return 1
+    local line
     while IFS= read -r line; do
-        line="${line%%#*}"  # strip comments
-        line="${line//\~/$HOME}"  # expand ~
-        line="${line%/}"  # remove trailing slash
+        line="${line%%#*}"          # strip comments
+        line="${line//\~/$HOME}"     # expand ~
+        line="${line%/}"            # remove trailing slash
         [ -z "$line" ] && continue
         if [ -e "$line" ]; then
-            BACKUP_TARGETS+=("$line")
+            out_ref+=("$line")
         else
             warn "Include path not found, skipping: $line"
         fi
-    done < "$INCLUDE_FILE"
-else
+    done < "$file"
+    [ "${#out_ref[@]}" -gt 0 ]
+}
+
+if ! build_targets "$INCLUDE_FILE" BACKUP_TARGETS; then
     error "Include file not found or empty: $INCLUDE_FILE"
     notify "Backup Failed" "Include file missing" "critical"
     exit 1
+fi
+
+# Remote scope: its own include file when present, otherwise the local one.
+REMOTE_TARGETS=()
+if build_targets "$INCLUDE_FILE_REMOTE" REMOTE_TARGETS; then
+    info "Offsite leg uses its own scope: $INCLUDE_FILE_REMOTE (${#REMOTE_TARGETS[@]} paths vs ${#BACKUP_TARGETS[@]} local)"
+else
+    REMOTE_TARGETS=("${BACKUP_TARGETS[@]}")
 fi
 
 # Add the dumps directory to the backup
@@ -290,12 +316,13 @@ ensure_repo_initialized() {
 
 run_repo_backup() {
     local repo="$1" label="$2"
-    info "[$label] Starting backup to $repo"
+    local -n targets_ref="$3"
+    info "[$label] Starting backup to $repo (${#targets_ref[@]} paths)"
     set +e
     local exit_code=0
     for attempt in 1 2 3; do
         info "[$label] Backup attempt $attempt/3"
-        restic -r "$repo" "${RESTIC_COMMON_ARGS[@]}" backup "${BACKUP_TARGETS[@]}" 2>&1
+        restic -r "$repo" "${RESTIC_COMMON_ARGS[@]}" backup "${targets_ref[@]}" 2>&1
         exit_code=$?
         [ $exit_code -eq 0 ] && break
         warn "[$label] Attempt $attempt failed (exit $exit_code); retrying in $((attempt * 300))s..."
@@ -309,17 +336,17 @@ run_repo_backup() {
 }
 
 # Local first: it is the copy that survives a failed upload.
-if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
-    ensure_repo_initialized "$RESTIC_REPOSITORY_LOCAL" "local" || REPO_FAILED=1
-    run_repo_backup "$RESTIC_REPOSITORY_LOCAL" "local"
-else
-    warn "No local repository configured (RESTIC_REPOSITORY_LOCAL) - skipping local backup"
-fi
+  if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+      ensure_repo_initialized "$RESTIC_REPOSITORY_LOCAL" "local" || REPO_FAILED=1
+      run_repo_backup "$RESTIC_REPOSITORY_LOCAL" "local" BACKUP_TARGETS
+  else
+      warn "No local repository configured (RESTIC_REPOSITORY_LOCAL) - skipping local backup"
+  fi
 
-OFFSITE_SKIPPED=0
-if [ "$REMOTE_AVAILABLE" -eq 1 ]; then
-    ensure_repo_initialized "$RESTIC_REPOSITORY" "drive" || REPO_FAILED=1
-    run_repo_backup "$RESTIC_REPOSITORY" "drive"
+  OFFSITE_SKIPPED=0
+  if [ "$REMOTE_AVAILABLE" -eq 1 ]; then
+      ensure_repo_initialized "$RESTIC_REPOSITORY" "drive" || REPO_FAILED=1
+      run_repo_backup "$RESTIC_REPOSITORY" "drive" REMOTE_TARGETS
 else
     warn "Offsite leg skipped: the rclone remote is not configured"
     OFFSITE_SKIPPED=1
