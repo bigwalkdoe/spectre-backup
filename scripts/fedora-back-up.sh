@@ -349,6 +349,22 @@ fi
 # ============================================================
 header "Phase 3: Restic filesystem backup"
 
+# Refresh the git mirrors before they are read. include.conf backs up
+# /home/deon/.git-mirror instead of /home/deon/dev, so the history that is
+# captured depends on this having just run. Doing it here rather than in cron
+# keeps the mirror and the snapshot consistent with each other, and means a
+# repo cloned since the last backup is still covered on the first run.
+#
+# Failure is warned about, not fatal: a mirror left over from the previous run
+# is still real history, and skipping the whole backup over a git hiccup would
+# be a worse outcome than backing up slightly stale history.
+if [ -f "$SCRIPT_DIR/git-mirror.sh" ]; then
+    info "Refreshing git mirrors..."
+    bash "$SCRIPT_DIR/git-mirror.sh" || warn "Git mirror refresh failed - backing up the previous mirror state"
+else
+    warn "git-mirror.sh not found - the git mirror may be stale"
+fi
+
 BACKUP_TARGETS=()
 # build_targets <include_file> -> populates TARGETS_OUT
 #
