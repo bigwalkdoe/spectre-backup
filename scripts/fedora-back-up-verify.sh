@@ -103,7 +103,9 @@ info "Repository accessible - $SNAPSHOT_COUNT snapshots found"
 # --- Check statistics ---
 header "Repository statistics"
 
-restic -r "$RESTIC_REPOSITORY" stats 2>/dev/null || warn "Could not retrieve repository stats"
+# raw-data mode reports the on-disk size from the index alone; the default
+# restore-size mode walks every snapshot's file trees (minutes on big repos).
+restic -r "$RESTIC_REPOSITORY" stats --mode raw-data 2>/dev/null || warn "Could not retrieve repository stats"
 
 # --- Run integrity check ---
 header "Running repository integrity check"

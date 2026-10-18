@@ -215,7 +215,10 @@ for RESTIC_REPOSITORY in "${PRUNE_TARGETS[@]}"; do
 
     echo ""
     SNAPSHOTS_LEFT=$(restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
-    REPO_SIZE=$(restic -r "$RESTIC_REPOSITORY" stats 2>/dev/null | grep -oP 'Total size: \K.*' || echo "unknown")
+    # Capital "Total Size:" (restic's actual output) and raw-data mode: the old
+    # lowercase pattern silently yielded "unknown", and restore-size mode walks
+    # every snapshot's trees right after prune has invalidated the caches.
+    REPO_SIZE=$(restic -r "$RESTIC_REPOSITORY" stats --mode raw-data 2>/dev/null | grep -oP 'Total Size:\s+\K\S.*' || echo "unknown")
     info "Snapshots remaining: $SNAPSHOTS_LEFT"
     info "Repository size:     $REPO_SIZE"
 done

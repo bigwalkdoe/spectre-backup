@@ -576,7 +576,11 @@ fi
 # Snapshot ID via JSON: the table output wraps tag lines and leads with a row
 # of dashes, which previously ended up printed as the snapshot id.
 SNAPSHOT_ID=$(restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq -r 'sort_by(.time) | last | .short_id // "unknown"' 2>/dev/null || echo "unknown")
-REPO_SIZE=$(restic -r "$RESTIC_REPOSITORY" stats 2>/dev/null | grep -oP 'Total size: \K.*' || echo "unknown")
+# restic prints "Total Size:" with a capital S; the old lowercase pattern never
+# matched, so every summary showed "unknown". raw-data mode reads only the
+# index instead of walking every snapshot's file trees, which takes minutes on
+# a repository this size.
+REPO_SIZE=$(restic -r "$RESTIC_REPOSITORY" stats --mode raw-data 2>/dev/null | grep -oP 'Total Size:\s+\K\S.*' || echo "unknown")
 
 echo ""
 echo -e "  ${BOLD}Status:${NC}        ${GREEN}✓ Backup Successful${NC}"

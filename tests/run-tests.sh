@@ -3,7 +3,7 @@
 # fedora-back-up - Test suite
 #
 # Tests distro detection, role detection, config coverage,
-# and shellcheck compliance across all scripts.
+# restic output parsing, and shellcheck compliance across all scripts.
 #
 # Usage:
 #   ./tests/run-tests.sh
@@ -211,6 +211,53 @@ if command -v shellcheck >/dev/null 2>&1; then
     done
 else
     echo "  SKIP: shellcheck not installed"
+fi
+
+# -------------------------------------------------------------
+# Test group: restic output parsing
+# -------------------------------------------------------------
+echo ""
+echo "--- Restic output parsing ---"
+# Guards regressions that failed silently in production: restic 0.17.3 prints
+# "Total Size:" (capital S), has no --format flag for snapshots, and its
+# --compact tables wrap rows and lead with a row of dashes.
+
+TOTAL=$((TOTAL + 1))
+if grep -rn "Total size:" "$PROJECT_DIR/scripts" >/dev/null 2>&1; then
+    echo "  FAIL: lowercase 'Total size:' pattern (never matches restic output)"
+    FAIL=$((FAIL + 1))
+else
+    echo "  PASS: no lowercase 'Total size:' pattern"
+    PASS=$((PASS + 1))
+fi
+
+TOTAL=$((TOTAL + 1))
+if grep -rn -- "--compact" "$PROJECT_DIR/scripts" >/dev/null 2>&1; then
+    echo "  FAIL: snapshot table parsing with --compact (use --json + jq)"
+    FAIL=$((FAIL + 1))
+else
+    echo "  PASS: no snapshot table parsing with --compact"
+    PASS=$((PASS + 1))
+fi
+
+TOTAL=$((TOTAL + 1))
+if grep -rEn '^[^#]*restic.*--format' "$PROJECT_DIR/scripts" >/dev/null 2>&1; then
+    echo "  FAIL: --format passed to restic (unsupported in 0.17.3, fails silently)"
+    FAIL=$((FAIL + 1))
+else
+    echo "  PASS: no --format passed to restic"
+    PASS=$((PASS + 1))
+fi
+
+# The size pattern must capture the value from restic's output shape.
+TOTAL=$((TOTAL + 1))
+captured=$(echo "              Total Size:  2.121 KiB" | grep -oP 'Total Size:\s+\K\S.*' || true)
+if [ "$captured" = "2.121 KiB" ]; then
+    echo "  PASS: repo size pattern captures the size"
+    PASS=$((PASS + 1))
+else
+    echo "  FAIL: repo size pattern captured '$captured'"
+    FAIL=$((FAIL + 1))
 fi
 
 # -------------------------------------------------------------
