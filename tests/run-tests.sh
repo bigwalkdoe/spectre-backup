@@ -214,6 +214,32 @@ else
 fi
 
 # -------------------------------------------------------------
+# Test group: snapshot tags
+# -------------------------------------------------------------
+echo ""
+echo "--- Snapshot tags ---"
+# The role tag must come from $ROLE: a leftover hardcoded workstation tag
+# made workstations carry a duplicate and would mislabel servers.
+
+TOTAL=$((TOTAL + 1))
+if grep -n -- '--tag "workstation"' "$PROJECT_DIR/scripts/fedora-back-up.sh" >/dev/null 2>&1; then
+    echo "  FAIL: hardcoded workstation tag in backup script"
+    FAIL=$((FAIL + 1))
+else
+    echo "  PASS: no hardcoded workstation tag"
+    PASS=$((PASS + 1))
+fi
+
+TOTAL=$((TOTAL + 1))
+if grep -n -- '--tag "$ROLE"' "$PROJECT_DIR/scripts/fedora-back-up.sh" >/dev/null 2>&1; then
+    echo "  PASS: role tag comes from \$ROLE"
+    PASS=$((PASS + 1))
+else
+    echo "  FAIL: role tag does not use \$ROLE"
+    FAIL=$((FAIL + 1))
+fi
+
+# -------------------------------------------------------------
 # Test group: restic output parsing
 # -------------------------------------------------------------
 echo ""

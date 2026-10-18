@@ -445,9 +445,11 @@ fi
 RESTIC_COMMON_ARGS=()
 RESTIC_COMMON_ARGS+=(-o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M")
 RESTIC_COMMON_ARGS+=(--verbose)
+# Tags: product name plus the detected role. The role must come from $ROLE --
+# a leftover hardcoded "workstation" tag duplicated it on workstations and
+# would have mislabelled every server snapshot.
 RESTIC_COMMON_ARGS+=(--tag "fedora-back-up")
 RESTIC_COMMON_ARGS+=(--tag "$ROLE")
-RESTIC_COMMON_ARGS+=(--tag "workstation")
 RESTIC_COMMON_ARGS+=(--host "$(hostname)")
 
 if [ -f "$EXCLUDE_FILE" ] && [ -s "$EXCLUDE_FILE" ]; then
