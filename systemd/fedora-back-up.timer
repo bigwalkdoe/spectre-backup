@@ -1,5 +1,5 @@
 [Unit]
-Description=fedora-back-up Timer - daily workstation backup
+Description=fedora-back-up Timer - daily workstation/server backup
 Documentation=https://github.com/bigwalkdoe/fedora-back-up
 
 [Timer]

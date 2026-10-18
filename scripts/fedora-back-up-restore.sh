@@ -12,8 +12,28 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
+
+# --- Source shared library ---
+if [ -f "$SCRIPT_DIR/backup-common.sh" ]; then
+    . "$SCRIPT_DIR/backup-common.sh"
+elif [ -f "$PROJECT_DIR/lib/backup-common.sh" ]; then
+    . "$PROJECT_DIR/lib/backup-common.sh"
+else
+    echo "ERROR: Cannot find backup-common.sh library" >&2
+    exit 1
+fi
+
+detect_distro
+ROLE="${FEDORA_BACK_UP_ROLE:-$(detect_role)}"
+resolve_dirs
+
+# --- Config directory ---
+if [ "$ROLE" = "server" ]; then
+    CONFIG_DIR="/etc/fedora-back-up"
+else
+    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+fi
+
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
@@ -35,12 +55,14 @@ for arg in "$@"; do
         --list|--snapshots) JUST_LIST=true ;;
         --snapshot=*) RESTORE_SNAPSHOT="${arg#*=}" ;;
         --dry-run) DRY_RUN=true ;;
+        --role=*) FEDORA_BACK_UP_ROLE="${arg#*=}" ;;
         --help|-h)
-            echo "Usage: $0 [--list] [--snapshot=<id>] [--dry-run]"
+            echo "Usage: $0 [--list] [--snapshot=<id>] [--dry-run] [--role=workstation|server]"
             echo ""
             echo "  --list         List all snapshots"
             echo "  --snapshot=<id> Restore specific snapshot (default: latest)"
             echo "  --dry-run      Show what would be restored without doing it"
+            echo "  --role=        Override auto-detected role (workstation|server)"
             exit 0
             ;;
     esac
@@ -50,11 +72,9 @@ done
 if [ -f "$CONFIG_DIR/.env" ]; then
     set -a; source "$CONFIG_DIR/.env"; set +a
 fi
-# # The remote path was rclone:fedora-back-up:, which has been
-# deleted. Repointed to the current backup folder. Override with the
-# RESTIC_REPOSITORY environment variable rather than editing this line.
 RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
 export RESTIC_PASSWORD_COMMAND="cat $RESTIC_PASSWORD_FILE"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 LOG_DIR="${LOG_DIR:-$STATE_DIR}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/restore-$(date +%Y%m%d-%H%M%S).log"
@@ -62,7 +82,7 @@ LOG_FILE="$LOG_DIR/restore-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # --- Pre-flight checks ---
-header "Pre-flight checks"
+header "Pre-flight checks ($DISTRO_ID $DISTRO_VERSION_ID, role=$ROLE)"
 
 if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then
     error "Restic password file not found: $RESTIC_PASSWORD_FILE"
@@ -72,13 +92,13 @@ fi
 for cmd in restic rclone; do
     if ! check_cmd "$cmd"; then
         error "Required command not found: $cmd"
-        echo "Install: sudo dnf install -y $cmd"
+        echo "Install: sudo $PKG_MANAGER install -y $cmd"
         exit 1
     fi
 done
 
-if ! rclone listremotes 2>/dev/null | grep -q "^gdrive:"; then
-    error "rclone remote 'gdrive:' not found"
+if ! rclone listremotes 2>/dev/null | grep -q "^fedora-back-up:"; then
+    error "rclone remote 'fedora-back-up:' not found"
     echo "Run: rclone config"
     exit 1
 fi
@@ -95,9 +115,9 @@ info "Repository accessible"
 # --- List snapshots (if requested) ---
 if [ "$JUST_LIST" = true ]; then
     header "Available Snapshots"
-    restic -r "$RESTIC_REPOSITORY" snapshots \
-        --group-by "host,tags" \
-        --format "  ${GREEN}%(short_id)${NC}  %(time)  %(host)  [%(tags)]" 2>/dev/null
+    # restic 0.17.3 has no --format flag for snapshots, so render from JSON.
+    restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null \
+        | jq -r 'sort_by(.time) | reverse | .[] | "  \(.short_id)  \(.time)  \(.hostname)  [\(.tags // [] | join(","))]"'
     echo ""
     info "To restore: $0 --snapshot=<id>"
     info "Paths in snapshot: restic -r $RESTIC_REPOSITORY ls <id> | head -50"
@@ -106,8 +126,8 @@ fi
 
 # --- Determine snapshot to restore ---
 if [ "$RESTORE_SNAPSHOT" = "latest" ]; then
-    SNAPSHOT_ID=$(restic -r "$RESTIC_REPOSITORY" snapshots --latest 1 --compact 2>/dev/null \
-        | grep -v "^ID\|^──\|^$" | awk '{print $1}' || echo "")
+    SNAPSHOT_ID=$(restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null \
+        | jq -r 'sort_by(.time) | last | .short_id // empty' 2>/dev/null || echo "")
     if [ -z "$SNAPSHOT_ID" ]; then
         error "No snapshots found in repository"
         exit 1
@@ -124,6 +144,8 @@ header "Restore Plan"
 echo -e "  ${BOLD}Snapshot:${NC}     $SNAPSHOT_ID"
 echo -e "  ${BOLD}Repository:${NC}   $RESTIC_REPOSITORY"
 echo -e "  ${BOLD}Restore to:${NC}   / (system root equivalent)"
+echo -e "  ${BOLD}Distro:${NC}       $DISTRO_ID $DISTRO_VERSION_ID"
+echo -e "  ${BOLD}Role:${NC}         $ROLE"
 echo -e "  ${BOLD}Dry run:${NC}      $DRY_RUN"
 echo ""
 
@@ -157,11 +179,12 @@ restic -r "$RESTIC_REPOSITORY" restore "$SNAPSHOT_ID" --target / 2>&1
 info "Filesystem restore complete"
 
 # ============================================================
+# Step 2: Restoring SSH keys
+# ============================================================
 header "Step 2: Restoring SSH keys"
 if [ -f "$HOME/.ssh/id_ed25519" ] || [ -f "$HOME/.ssh/id_rsa" ]; then
     info "SSH keys already exist - skipping"
 else
-    # SSH keys should be restored by the restic restore above
     if [ -d "$HOME/.ssh" ]; then
         chmod 700 "$HOME/.ssh"
         find "$HOME/.ssh" -type f -name "id_*" -exec chmod 600 {} \; 2>/dev/null || true
@@ -171,6 +194,8 @@ else
 fi
 
 # ============================================================
+# Step 3: Restoring GPG keys
+# ============================================================
 header "Step 3: Restoring GPG keys"
 if [ -d "$HOME/.gnupg" ]; then
     chmod 700 "$HOME/.gnupg"
@@ -179,8 +204,10 @@ if [ -d "$HOME/.gnupg" ]; then
 fi
 
 # ============================================================
+# Step 4: Restoring PostgreSQL dumps
+# ============================================================
 header "Step 4: Restoring PostgreSQL dumps"
-PG_DUMPS=$(find "/home" -path "*/dumps/*/postgres.sql.gz" 2>/dev/null | head -5 || true)
+PG_DUMPS=$(find "$STATE_DIR" -path "*/dumps/*/postgres.sql.gz" 2>/dev/null | head -5 || true)
 if [ -n "$PG_DUMPS" ] && check_cmd pg_restore; then
     info "PostgreSQL dumps found in backup"
     echo "To restore databases manually:"
@@ -189,6 +216,8 @@ else
     info "No PostgreSQL dumps found in restored files (or psql not available)"
 fi
 
+# ============================================================
+# Step 5: Restoring container definitions
 # ============================================================
 header "Step 5: Restoring container definitions"
 if [ -d "$HOME/.config/containers" ]; then
@@ -199,11 +228,15 @@ if [ -d "$HOME/.docker" ]; then
 fi
 
 # ============================================================
+# Restore Summary
+# ============================================================
 header "Restore Summary"
 
 echo -e "  ${GREEN}${BOLD}✓ Restore Complete${NC}"
 echo -e "  ${BOLD}Snapshot:${NC}     $SNAPSHOT_ID"
 echo -e "  ${BOLD}Repository:${NC}   $RESTIC_REPOSITORY"
+echo -e "  ${BOLD}Distro:${NC}       $DISTRO_ID $DISTRO_VERSION_ID"
+echo -e "  ${BOLD}Role:${NC}         $ROLE"
 echo -e "  ${BOLD}Log file:${NC}     $LOG_FILE"
 echo ""
 echo -e "Next steps:"

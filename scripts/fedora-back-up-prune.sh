@@ -17,9 +17,31 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# --- Source shared library ---
+if [ -f "$SCRIPT_DIR/backup-common.sh" ]; then
+    . "$SCRIPT_DIR/backup-common.sh"
+elif [ -f "$PROJECT_DIR/lib/backup-common.sh" ]; then
+    . "$PROJECT_DIR/lib/backup-common.sh"
+else
+    echo "ERROR: Cannot find backup-common.sh library" >&2
+    exit 1
+fi
+
+detect_distro
+ROLE="${FEDORA_BACK_UP_ROLE:-$(detect_role)}"
+resolve_dirs
+
+# --- Config directory ---
+if [ "$ROLE" = "server" ]; then
+    CONFIG_DIR="/etc/fedora-back-up"
+else
+    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+fi
+
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
-LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
@@ -35,11 +57,13 @@ for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=true ;;
         --no-notify) SEND_NOTIFY=false ;;
+        --role=*) FEDORA_BACK_UP_ROLE="${arg#*=}" ;;
         --help|-h)
-            echo "Usage: $0 [--dry-run] [--no-notify]"
+            echo "Usage: $0 [--dry-run] [--no-notify] [--role=workstation|server]"
             echo ""
             echo "  --dry-run    Preview pruning without deleting"
             echo "  --no-notify  Suppress desktop notifications"
+            echo "  --role=      Override auto-detected role (workstation|server)"
             exit 0
             ;;
     esac
@@ -49,28 +73,11 @@ done
 if [ -f "$CONFIG_DIR/.env" ]; then
     set -a; source "$CONFIG_DIR/.env"; set +a
 fi
-# # The remote path was rclone:fedora-back-up:, which has been
-# deleted. Repointed to the current backup folder. Override with the
-# RESTIC_REPOSITORY environment variable rather than editing this line.
-# Three bugs meant retention was never enforced anywhere.
-#
-#   1. This script only ever pruned RESTIC_REPOSITORY, which .env pins to the
-#      Drive remote. The local repo -- which holds every real snapshot and had
-#      grown to 52G with 52 snapshots -- was never pruned at all.
-#   2. `restic snapshots --format` does not exist in restic 0.17.3. The command
-#      failed, stderr went to /dev/null, and the || branch printed "No snapshots
-#      found - nothing to prune" and exited 0.
-#   3. The FORGET_ARGS array never contained the `forget` subcommand, so restic
-#      was handed only global flags and rejected the first with
-#      "unknown flag: --keep-hourly".
-#
-# Together those made every prune a silent no-op that still reported success.
-#
-# PRUNE_TARGETS_OVERRIDE lets a one-off run target specific repositories.
+
+# Prune both local and offsite repositories. Local first (it holds every real
+# snapshot). Each pass is time-boxed so an unreachable offsite remote cannot
+# stall the whole prune.
 PRUNE_TARGETS=()
-# Local first, and each pass time-boxed. The Drive remote blocks for many
-# minutes when it hits the API quota (observed: >10 min with no progress), and
-# without a guard a single unreachable remote stalls the whole prune.
 PRUNE_TIMEOUT="${PRUNE_TIMEOUT:-900}"
 [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ] && PRUNE_TARGETS+=("$RESTIC_REPOSITORY_LOCAL")
 [ -n "${RESTIC_REPOSITORY:-}" ] && PRUNE_TARGETS+=("$RESTIC_REPOSITORY")
@@ -80,8 +87,8 @@ fi
 [ "${#PRUNE_TARGETS[@]}" -eq 0 ] && PRUNE_TARGETS=("rclone:fedora-back-up:")
 export RESTIC_PASSWORD_COMMAND="cat $RESTIC_PASSWORD_FILE"
 
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/cleanup-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "$STATE_DIR"
+LOG_FILE="$STATE_DIR/cleanup-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # --- Pre-flight ---
@@ -96,7 +103,15 @@ PRUNE_FAILED=0
 # pruned records the failure and the loop continues: an unreachable offsite
 # remote must not prevent the local repository from being pruned.
 for RESTIC_REPOSITORY in "${PRUNE_TARGETS[@]}"; do
-    info "Repository: $RESTIC_REPOSITORY"
+    info "Repository: $RESTIC_REPOSITORY ($DISTRO_ID, role=$ROLE)"
+
+    # Heal stale locks before taking the exclusive lock that `forget` needs.
+    # A run interrupted mid-backup leaves a lock behind, and prune then fails
+    # with "repository is already locked" until someone removes it manually.
+    # Plain `unlock` only removes stale locks, so a running backup is safe.
+    if timeout 120 restic -r "$RESTIC_REPOSITORY" unlock >/dev/null 2>&1; then
+        info "Stale locks cleared (if any) for $RESTIC_REPOSITORY"
+    fi
 
     # --- Retention policy ---
     header "Retention Policy"
@@ -121,8 +136,6 @@ for RESTIC_REPOSITORY in "${PRUNE_TARGETS[@]}"; do
     fi
     snapshot_count=$(printf '%s' "$snapshot_json" | jq 'length' 2>/dev/null || echo 0)
     if [ "$snapshot_count" -eq 0 ]; then
-        # A genuinely empty repo is a real no-op, but it must not stop the other
-        # repositories from being pruned.
         warn "No snapshots in $RESTIC_REPOSITORY - skipping it"
         continue
     fi
@@ -145,16 +158,15 @@ for RESTIC_REPOSITORY in "${PRUNE_TARGETS[@]}"; do
         echo ""
     fi
 
-    # --- Find and keep dumps-related snapshots (tagged) ---
-    # We apply forget to all snapshots; restic's policy is per-group
+    # --- Apply retention policy ---
     info "Applying retention policy..."
 
     set +e
     if command -v timeout >/dev/null 2>&1; then
-    timeout "$PRUNE_TIMEOUT" restic "${FORGET_ARGS[@]}" 2>&1
-else
-    restic "${FORGET_ARGS[@]}" 2>&1
-fi
+        timeout "$PRUNE_TIMEOUT" restic "${FORGET_ARGS[@]}" 2>&1
+    else
+        restic "${FORGET_ARGS[@]}" 2>&1
+    fi
     FORGET_EXIT=$?
     set -e
 
@@ -202,7 +214,7 @@ fi
         | jq -r 'sort_by(.time) | reverse | .[] | "  \(.short_id)  \(.time)"' || true
 
     echo ""
-    SNAPSHOTS_LEFT=$(restic -r "$RESTIC_REPOSITORY" snapshots --compact 2>/dev/null | grep -c "^[a-f0-9]\{8\}" || echo "0")
+    SNAPSHOTS_LEFT=$(restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
     REPO_SIZE=$(restic -r "$RESTIC_REPOSITORY" stats 2>/dev/null | grep -oP 'Total size: \K.*' || echo "unknown")
     info "Snapshots remaining: $SNAPSHOTS_LEFT"
     info "Repository size:     $REPO_SIZE"

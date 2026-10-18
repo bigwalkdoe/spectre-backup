@@ -23,8 +23,8 @@
 # Safe to run repeatedly: existing mirrors are fetched, not re-cloned.
 set -euo pipefail
 
-SRC_ROOT="${GIT_MIRROR_SRC:-/home/deon/dev}"
-DEST="${GIT_MIRROR_DEST:-/home/deon/.git-mirror}"
+SRC_ROOT="${GIT_MIRROR_SRC:-$HOME/dev}"
+DEST="${GIT_MIRROR_DEST:-$HOME/.git-mirror}"
 
 while [ $# -gt 0 ]; do
     case "$1" in

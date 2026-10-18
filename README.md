@@ -1,30 +1,43 @@
 # fedora-back-up
 
-Encrypted, automated, versioned backup platform for Fedora Linux workstations.
+Encrypted, automated, versioned backup platform for Linux workstations and servers.
 
-**Target: New laptop → Fully operational in under 2 hours**
+**Target: New machine → Fully operational in under 2 hours**
+
+## Supported platforms
+
+| Distro | Role | Install command |
+|--------|------|-----------------|
+| Fedora | Workstation | `./scripts/fedora-back-up-install.sh --role=workstation` |
+| Fedora | Server | `./scripts/fedora-back-up-install.sh --role=server` |
+| Ubuntu | Workstation | `./scripts/fedora-back-up-install.sh --role=workstation` |
+| Ubuntu | Server | `./scripts/fedora-back-up-install.sh --role=server` |
+
+Role is auto-detected if not specified: a graphical session means workstation, otherwise server.
 
 ## Architecture
 
 ```
-  Fedora Workstation
+  Linux Machine (workstation or server)
       │
-      ├── Filesystem (projects, config, documents)
+      ├── Filesystem (projects, config, documents, /etc, /opt, /var)
       ├── PostgreSQL (pg_dumpall → compressed)
-      └── Containers (compose files, quadlets, configs)
+      └── Containers (Docker compose, Podman quadlets, configs)
               │
               ▼
       Restic Backup Engine
-         (AES-256 encryption)
+     (AES-256 encryption, deduplication)
               │
-              ▼
-      rclone → Google Drive
-         (versioned snapshots)
+              ├── Local repository (full scope, fast)
+              └── rclone → Offsite storage (Google Drive, S3, etc.)
+                     (small, irreplaceable scope only)
 ```
+
+Dual-repository design: the local repository holds everything; the offsite repository carries only what fits your quota and cannot be regenerated (SSH/GPG keys, dotfiles, system config). A broken offsite remote degrades gracefully — the local backup still runs.
 
 ## Requirements
 
-- Fedora Workstation (or any modern Linux)
+- Fedora or Ubuntu
 - Google Drive account (or any rclone-supported storage)
 - `sudo` access for initial package installation
 
@@ -33,63 +46,40 @@ Encrypted, automated, versioned backup platform for Fedora Linux workstations.
 ```bash
 # Clone or copy the fedora-back-up directory
 cd fedora-back-up
-./scripts/fedora-back-up-install.sh
+
+# Workstation (default if a desktop session is detected)
+./scripts/fedora-back-up-install.sh --role=workstation
+
+# Server (system systemd service, runs as root)
+./scripts/fedora-back-up-install.sh --role=server
 ```
 
 The installer will:
 
-1. Install packages: `restic`, `rclone`, `jq`
-2. Create configuration at `~/.config/fedora-back-up/`
-3. Guide you through rclone Google Drive authentication
-4. Create the `ModelinkBackups/workstation` folder on Google Drive
+1. Detect distro (Fedora → `dnf`, Ubuntu → `apt`)
+2. Install packages: `restic`, `rclone`, `jq`
+3. Create configuration (role- and distro-specific scopes)
+4. Guide you through rclone offsite storage authentication
 5. Prompt for your Restic repository encryption password
 6. Initialize the encrypted Restic repository
-7. Install systemd service and timer
+7. Install systemd service and timer (user service for workstations, system service for servers)
 8. Offer to run a test backup
 
-## Manual Configuration
+## Configuration layout
 
-### 1. Configure includes
-
-Edit `~/.config/fedora-back-up/include.conf`:
+Workstations install config to `~/.config/fedora-back-up/`. Servers install to `/etc/fedora-back-up/`.
 
 ```
-/home/deon/Documents
-/home/deon/Projects
-/home/deon/.config
-/home/deon/.ssh
-/home/deon/.gnupg
-/home/deon/.bashrc
-/home/deon/.zshrc
-/home/deon/.gitconfig
-/etc
-/opt
+~/.config/fedora-back-up/          (workstation)
+/etc/fedora-back-up/               (server)
+    .env             # Environment configuration
+    password         # Restic repository password (chmod 600)
+    include.conf     # Paths to include in backups
+    exclude.conf     # Patterns to exclude
+    include-remote.conf  # Offsite scope (small, fits quota)
 ```
 
-### 2. Configure excludes
-
-Edit `~/.config/fedora-back-up/exclude.conf`:
-
-```
-node_modules
-.venv
-target/
-dist/
-.cache
-Trash
-*.iso
-Steam
-```
-
-### 3. Configure environment
-
-Edit `~/.config/fedora-back-up/.env`:
-
-```bash
-RESTIC_REPOSITORY="rclone:gdrive:ModelinkBackups/workstation"
-PG_ENABLED="true"
-NOTIFY_ENABLED="true"
-```
+Config is selected by role and distro: `config/<role>/<distro>/`. Falls back to `config/defaults/` when no match exists.
 
 ## Usage
 
@@ -97,6 +87,13 @@ NOTIFY_ENABLED="true"
 
 ```bash
 fedora-back-up.sh
+```
+
+### Health check
+
+```bash
+fedora-back-up.sh --health          # Human-readable
+fedora-back-up.sh --health --json   # Machine-readable JSON
 ```
 
 ### View snapshots
@@ -137,7 +134,7 @@ fedora-back-up-prune.sh --dry-run
 fedora-back-up-prune.sh
 ```
 
-## Retention Policy
+## Retention policy
 
 | Interval | Retention |
 |----------|-----------|
@@ -149,43 +146,48 @@ fedora-back-up-prune.sh
 
 Pruning runs automatically after each backup.
 
-## Scheduled Backups
+## Scheduled backups
 
-A systemd timer runs daily at 04:00 (with random delay).
+A systemd timer runs daily at 04:00 (with up to 1h random delay).
 
+Workstation (user timer):
 ```bash
-# Check timer status
 systemctl --user status fedora-back-up.timer
-
-# View last backup log
 journalctl --user -u fedora-back-up.service -n 50
-
-# Follow backup output
 journalctl --user -u fedora-back-up.service -f
 ```
 
-## Disaster Recovery Workflow
+Server (system timer):
+```bash
+systemctl status fedora-back-up.timer
+journalctl -u fedora-back-up.service -n 50
+journalctl -u fedora-back-up.service -f
+```
 
-When replacing a lost laptop:
+## Disaster recovery workflow
+
+When replacing a lost machine:
 
 ```
-1. Install Fedora (minimal)             ~30 min
-2. Install dependencies                 ~~~~5 min
-     sudo dnf install -y restic rclone
-3. Authenticate Google Drive            ~~~~5 min
-     rclone config
-4. Restore backup                       ~30 min
-     fedora-back-up-restore.sh
-5. Verify SSH/GPG keys                  ~~~~5 min
-6. Install remaining packages           ~15 min
-   (from restored config, you know what you need)
-7. Restore PostgreSQL dumps             ~~~~5 min
-8. Review container configs             ~~~~5 min
+1. Install Fedora or Ubuntu (minimal)         ~30 min
+2. Install dependencies                        ~~~~5 min
+   Fedora:  sudo dnf install -y restic rclone
+   Ubuntu:  sudo apt-get install -y restic rclone jq
+3. Authenticate offsite storage                ~~~~5 min
+   rclone config
+4. Run the installer                           ~~~~5 min
+   ./scripts/fedora-back-up-install.sh
+5. Restore backup                              ~30 min
+   fedora-back-up-restore.sh
+6. Verify SSH/GPG keys                         ~~~~5 min
+7. Install remaining packages                  ~15 min
+8. Restore PostgreSQL dumps                    ~~~~5 min
+9. Review container configs                    ~~~~5 min
 ----------------------------------------------
-Total:                              < 2 hours
+Total:                                    < 2 hours
 ```
 
-## Scripts Reference
+## Scripts reference
 
 | Script | Purpose |
 |--------|---------|
@@ -194,10 +196,11 @@ Total:                              < 2 hours
 | `fedora-back-up-restore.sh` | Disaster recovery: restore everything from a snapshot |
 | `fedora-back-up-verify.sh` | Integrity verification (quick or full) |
 | `fedora-back-up-prune.sh` | Enforce retention policy with `restic forget` + `prune` |
+| `git-mirror.sh` | Mirror git history (without working trees) for backup |
 
 ## Logs
 
-All logs are stored in `~/.local/state/fedora-back-up/`:
+All logs are stored in `~/.local/state/fedora-back-up/` (workstations) or `/root/.local/state/fedora-back-up/` (servers):
 
 | File | Content |
 |------|---------|
@@ -210,43 +213,18 @@ All logs are stored in `~/.local/state/fedora-back-up/`:
 ## Security
 
 - No credentials are hard-coded in scripts
-- Restic repository password is stored in `~/.config/fedora-back-up/password` (chmod 600)
+- Restic repository password is stored in the config directory (chmod 600)
 - All data is encrypted with AES-256 before leaving your machine
 - Backup logs exclude sensitive content
 - Environment templates (`.env.example`) contain no secrets
-- PostgreSQL credentials are read from environment or `.env` file (chmod 600)
+- The config directory holding the password is deliberately **excluded** from the offsite backup, so offsite storage access alone cannot unlock your backups
 
-## File Layout
+## Custom storage backend
 
-```
-~/.config/fedora-back-up/
-    .env              # Environment configuration
-    password          # Restic repository password (chmod 600)
-    include.conf      # Paths to include in backups
-    exclude.conf      # Patterns to exclude
-
-~/.local/state/fedora-back-up/
-    backup.log        # Backup operation log
-    verify.log        # Verification log
-    cleanup.log       # Pruning log
-    dumps/            # Pre-backup data dumps
-        YYYYMMDD-HHMMSS/
-            postgres.sql.gz
-            containers/
-
-~/.local/bin/
-    fedora-back-up.sh    # Main backup script
-    fedora-back-up-restore.sh   # Restore script
-    fedora-back-up-verify.sh    # Verification script
-    fedora-back-up-prune.sh     # Pruning script
-```
-
-## Custom Storage Backend
-
-By default, backups go to Google Drive. To use a different backend:
+By default, offsite backups go to Google Drive via the `fedora-back-up:` rclone remote. To use a different backend:
 
 1. Configure rclone: `rclone config`
-2. Change `RESTIC_REPOSITORY` in `~/.config/fedora-back-up/.env`:
+2. Change `RESTIC_REPOSITORY` in your `.env`:
 
 ```bash
 # Examples:
@@ -265,3 +243,22 @@ All operations are safe to run repeatedly:
 - `fedora-back-up-restore.sh` - Overwrites existing files with backed-up versions
 - `fedora-back-up-verify.sh` - Read-only; no side effects
 - `fedora-back-up-prune.sh` - Only removes snapshots matching unused retention criteria
+
+## File layout (installed)
+
+```
+~/.config/fedora-back-up/          (workstation config)
+/etc/fedora-back-up/               (server config)
+~/.local/state/fedora-back-up/     (logs, dumps, state)
+    dumps/
+        YYYYMMDD-HHMMSS/
+            postgres.sql.gz
+            containers/
+~/.local/bin/                      (workstation scripts)
+/root/.local/bin/                  (server scripts)
+    fedora-back-up.sh
+    fedora-back-up-restore.sh
+    fedora-back-up-verify.sh
+    fedora-back-up-prune.sh
+    git-mirror.sh
+```

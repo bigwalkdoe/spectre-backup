@@ -1,0 +1,24 @@
+[Unit]
+Description=fedora-back-up - Encrypted versioned server backup
+Documentation=https://github.com/bigwalkdoe/fedora-back-up
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/.local/bin/fedora-back-up.sh
+User=root
+Group=root
+Environment=HOME=/root
+Environment=XDG_CONFIG_HOME=/root/.config
+Environment=XDG_DATA_HOME=/root/.local/share
+Environment=XDG_STATE_HOME=/root/.local/state
+Environment=FEDORA_BACK_UP_ROLE=server
+StandardOutput=journal
+StandardError=journal
+Nice=19
+IOSchedulingClass=3
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

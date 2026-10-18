@@ -1,23 +1,96 @@
 #!/bin/bash
 # ============================================================
 # fedora-back-up - Main Backup Engine
-# Encrypted, versioned workstation backup via Restic + rclone
+# Encrypted, versioned backup via Restic + rclone.
+# Supports Fedora/Ubuntu, workstation/server roles.
 # ============================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# --- Configuration ---
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
-if [ -f "$CONFIG_DIR/.env" ]; then
-    set -a; source "$CONFIG_DIR/.env"; set +a
-elif [ -f "$PROJECT_DIR/config/.env.example" ]; then
-    set -a; source "$PROJECT_DIR/config/.env.example"; set +a
+# --- Source shared library ---
+# Look alongside the script first (installed location), then project dir (dev).
+if [ -f "$SCRIPT_DIR/backup-common.sh" ]; then
+    . "$SCRIPT_DIR/backup-common.sh"
+elif [ -f "$PROJECT_DIR/lib/backup-common.sh" ]; then
+    . "$PROJECT_DIR/lib/backup-common.sh"
+else
+    echo "ERROR: Cannot find backup-common.sh library" >&2
+    exit 1
 fi
 
-LOG_DIR="${LOG_DIR:-$HOME/.local/state/fedora-back-up}"
+# --- Detect distro and role ---
+detect_distro
+ROLE="${FEDORA_BACK_UP_ROLE:-$(detect_role)}"
+resolve_dirs
 
+# --- Config directory (system-wide for servers, user for workstations) ---
+if [ "$ROLE" = "server" ]; then
+    CONFIG_DIR="/etc/fedora-back-up"
+else
+    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+fi
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
+
+# --- Load environment ---
+load_env || true
+
+# --- Defaults (overridable via .env) ---
+RESTIC_PASSWORD_FILE="${RESTIC_PASSWORD_FILE:-$CONFIG_DIR/password}"
+INCLUDE_FILE="${INCLUDE_FILE:-$CONFIG_DIR/include.conf}"
+EXCLUDE_FILE="${EXCLUDE_FILE:-$CONFIG_DIR/exclude.conf}"
+INCLUDE_FILE_REMOTE="${INCLUDE_FILE_REMOTE:-$CONFIG_DIR/include-remote.conf}"
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
+NOTIFY_ENABLED="${NOTIFY_ENABLED:-true}"
+NOTIFY_DESKTOP="${NOTIFY_DESKTOP:-true}"
+PG_ENABLED="${PG_ENABLED:-true}"
+PG_HOST="${PG_HOST:-localhost}"
+PG_PORT="${PG_PORT:-5432}"
+CONTAINERS_ENABLED="${CONTAINERS_ENABLED:-true}"
+
+# Desktop notifications only make sense on workstations
+if [ "$ROLE" = "server" ]; then
+    NOTIFY_DESKTOP="false"
+fi
+
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+DUMPS_DIR="$STATE_DIR/dumps/$TIMESTAMP"
+mkdir -p "$STATE_DIR" "$DUMPS_DIR"
+LOG_FILE="$STATE_DIR/backup.log"
+ERROR_LOG="$STATE_DIR/error.log"
+
+exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
+
+# Colours
+RED=''; GREEN=''; YELLOW=''; BLUE=''; BOLD=''; NC=''
+if [ -t 1 ]; then
+    RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
+fi
+
+info()  { echo -e "$(date '+%H:%M:%S') ${GREEN}[INFO]${NC}  $*"; }
+warn()  { echo -e "$(date '+%H:%M:%S') ${YELLOW}[WARN]${NC}  $*"; }
+error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${NC} $*" >&2; }
+header(){ echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
+
+notify() {
+    local title="$1" msg="$2" urgency="${3:-normal}"
+    [ "$NOTIFY_ENABLED" != "true" ] && return 0
+    echo "$title: $msg"
+    if [ "$NOTIFY_DESKTOP" = "true" ] && command -v notify-send &>/dev/null; then
+        notify-send -u "$urgency" "$title" "$msg" 2>/dev/null || true
+    fi
+}
+
+cleanup() {
+    rm -rf "$DUMPS_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# ============================================================
+# Health check
+# ============================================================
 health_check() {
     local out_json=0
     local rc_ok=0 rc_deg=1 rc_fail=2
@@ -36,8 +109,8 @@ health_check() {
     local local_free_g=0
     local df_free_kb=0
 
-    # Local
-    if [ -n "${RESTIC_PASSWORD_FILE:-}" ] && [ -d "${RESTIC_REPOSITORY_LOCAL:-}" ] 2>/dev/null || [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+    # Local repository
+    if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ] && [ -n "${RESTIC_PASSWORD_FILE:-}" ]; then
         local_newest_iso=$(RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" timeout 180 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq -r '.[-1].time // empty' 2>/dev/null || true)
         local_count=$(RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" timeout 180 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
     fi
@@ -46,7 +119,7 @@ health_check() {
         local_age_h=$(( (now - local_newest_ts) / 3600 ))
     fi
 
-    # Offsite
+    # Offsite repository
     if [ -n "${RESTIC_PASSWORD_FILE:-}" ]; then
         off_newest_iso=$(RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" timeout 180 restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq -r '.[-1].time // empty' 2>/dev/null || true)
         off_count=$(RESTIC_PASSWORD_FILE="$RESTIC_PASSWORD_FILE" timeout 180 restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
@@ -69,7 +142,9 @@ health_check() {
     # Quota for offsite (rclone)
     local used_pct=""
     if command -v rclone >/dev/null 2>&1; then
-        used_pct=$(timeout 60 rclone about "${REMOTE_NAME:-fedora-back-up}:" 2>/dev/null | grep -oP 'Used:.*?([0-9.]+)%' | grep -oP '([0-9.]+)%' | tr -d '%' | head -1 || true)
+        REMOTE_NAME="${RESTIC_REPOSITORY#*:}"
+        REMOTE_NAME="${REMOTE_NAME%%:*}"
+        used_pct=$(timeout 60 rclone about "${REMOTE_NAME}:" 2>/dev/null | grep -oP 'Used:.*?([0-9.]+)%' | grep -oP '([0-9.]+)%' | tr -d '%' | head -1 || true)
     fi
 
     local local_status="ok" off_status="ok" disk_status="ok" quota_status="ok" locks_status="ok"
@@ -99,6 +174,8 @@ health_check() {
 {
   "status": "$( [ $overall -eq 0 ] && echo ok || ([ $overall -eq 1 ] && echo degraded || echo failed) )",
   "exit_code": $overall,
+  "distro": "$DISTRO_ID",
+  "role": "$ROLE",
   "local": {"count": $local_count, "newest_iso": "$local_newest_iso", "age_hours": $local_age_h, "status": "$local_status"},
   "offsite": {"count": $off_count, "newest_iso": "$off_newest_iso", "age_hours": $off_age_h, "status": "$off_status"},
   "disk_free_g": $local_free_g, "disk_status": "$disk_status",
@@ -109,6 +186,8 @@ JSON
         return $overall
     else
         echo "health: $( [ $overall -eq 0 ] && echo OK || ([ $overall -eq 1 ] && echo DEGRADED || echo FAILED) )"
+        echo "  distro:  $DISTRO_ID $DISTRO_VERSION_ID"
+        echo "  role:    $ROLE"
         echo "  local:   count=$local_count age_h=$local_age_h status=$local_status (newest=$local_newest_iso)"
         echo "  offsite: count=$off_count age_h=$off_age_h status=$off_status (newest=$off_newest_iso)"
         echo "  disk:    free_g=$local_free_g status=$disk_status"
@@ -117,77 +196,27 @@ JSON
     fi
 }
 
-
-
-# Auto-heal stale restic locks (resilience)
+# Auto-heal stale restic locks (resilience).
+#
+# A run that is interrupted (machine sleeps or is shut down mid-backup, or a
+# manual run is killed) leaves a lock behind. restic's own stale-lock handling
+# did not clear them in practice: the timer run of 18 Oct 2026 found locks from
+# 3 Oct and 16 Oct still present, and every prune since had failed with
+# "repository is already locked". Plain `unlock` (without --remove-all) only
+# removes locks that are already stale, so a backup that is genuinely running
+# is not disturbed.
 heal_lock() {
     local repo="$1" label="$2"
     if [ -n "${repo:-}" ]; then
-        if timeout 60 restic -r "$repo" unlock --remove-all >/dev/null 2>&1; then
-            echo "locks-healed: $label" >> "$LOG_DIR/backup.log"
+        if timeout 120 restic -r "$repo" unlock >/dev/null 2>&1; then
+            echo "locks-healed (stale only): $label" >> "$STATE_DIR/backup.log"
         fi
     fi
 }
 
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
-RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
-INCLUDE_FILE="${INCLUDE_FILE:-$CONFIG_DIR/include.conf}"
-EXCLUDE_FILE="${EXCLUDE_FILE:-$CONFIG_DIR/exclude.conf}"
-# Offsite leg scope. The local and remote repositories do not have to carry the
-# same paths: the remote may be a target with a much smaller quota than the
-# disk it protects. When this file is absent the remote falls back to the full
-# local scope, so existing deployments are unaffected.
-INCLUDE_FILE_REMOTE="${INCLUDE_FILE_REMOTE:-$CONFIG_DIR/include-remote.conf}"
-# # The remote path was rclone:fedora-back-up:, which has been
-# deleted. Repointed to the current backup folder. Override with the
-# RESTIC_REPOSITORY environment variable rather than editing this line.
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
-RESTIC_REMOTE="fedora-back-up"
-
-NOTIFY_ENABLED="${NOTIFY_ENABLED:-true}"
-NOTIFY_DESKTOP="${NOTIFY_DESKTOP:-true}"
-PG_ENABLED="${PG_ENABLED:-true}"
-PG_HOST="${PG_HOST:-localhost}"
-PG_PORT="${PG_PORT:-5432}"
-CONTAINERS_ENABLED="${CONTAINERS_ENABLED:-true}"
-
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-DUMPS_DIR="$LOG_DIR/dumps/$TIMESTAMP"
-mkdir -p "$LOG_DIR" "$DUMPS_DIR"
-LOG_FILE="$LOG_DIR/backup.log"
-ERROR_LOG="$LOG_DIR/error.log"
-
-exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
-
-RED=''; GREEN=''; YELLOW=''; BLUE=''; BOLD=''; NC=''
-if [ -t 1 ]; then
-    RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-    BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
-fi
-
-info()  { echo -e "$(date '+%H:%M:%S') ${GREEN}[INFO]${NC}  $*"; }
-warn()  { echo -e "$(date '+%H:%M:%S') ${YELLOW}[WARN]${NC}  $*"; }
-error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${NC} $*" >&2; }
-header(){ echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
-
-notify() {
-    local title="$1" msg="$2" urgency="${3:-normal}"
-    [ "$NOTIFY_ENABLED" != "true" ] && return 0
-    echo "$title: $msg"
-    if [ "$NOTIFY_DESKTOP" = "true" ] && command -v notify-send &>/dev/null; then
-        notify-send -u "$urgency" "$title" "$msg" 2>/dev/null || true
-    fi
-}
-
-cleanup() {
-    rm -rf "$DUMPS_DIR" 2>/dev/null || true
-}
-trap cleanup EXIT
-
 # ============================================================
-
-
 # Health dispatch
+# ============================================================
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -197,7 +226,7 @@ for arg in "$@"; do
     esac
 done
 
-header "Pre-flight checks"
+header "Pre-flight checks ($DISTRO_ID $DISTRO_VERSION_ID, role=$ROLE)"
 
 if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then
     error "Restic password file not found: $RESTIC_PASSWORD_FILE"
@@ -219,20 +248,8 @@ for cmd in restic rclone; do
     fi
 done
 
-# Does the offsite leg have a usable backend?
-#
-# This used to `exit 1` when the rclone remote was missing. The local repository
-# is not backed up until much later in the run, so an unreachable offsite remote
-# silently cancelled the local backup too: snapshots in RESTIC_REPOSITORY_LOCAL
-# stopped on 11 September while every run after that failed here with "rclone
-# remote gdrive not found". A remote that cannot be reached is a degradation, not
-# a reason to also lose the local copy.
-#
-# Local snapshots stopped on 24 September, when the remote folder was deleted and
-# the configured path stopped resolving.
-#
-# The run still exits non-zero overall and still notifies, so a broken offsite leg
-# cannot pass for a healthy backup.
+# --- Offsite remote availability ---
+# A broken remote degrades gracefully: the local backup still runs.
 REMOTE_AVAILABLE=1
 BACKEND="${RESTIC_REPOSITORY%%:*}"
 if [ "$BACKEND" = "rclone" ]; then
@@ -241,18 +258,11 @@ if [ "$BACKEND" = "rclone" ]; then
     if ! rclone listremotes 2>/dev/null | grep -q "^${REMOTE_NAME}:"; then
         error "rclone remote '$REMOTE_NAME:' is not defined -- offsite leg will be SKIPPED"
         warn "The local repository will still be backed up."
-        warn "Create the remote with: rclone config   (n) new remote -> $REMOTE_NAME -> Storage: drive"
+        warn "Create the remote with: rclone config   (n) new remote -> $REMOTE_NAME"
         notify "Backup Degraded" "rclone remote $REMOTE_NAME not defined; local backup still running" "warning"
         REMOTE_AVAILABLE=0
     elif ! rclone lsd "${REMOTE_NAME}:" >/dev/null 2>&1; then
-        # Defined is not the same as usable. A remote can exist in the config with
-        # no OAuth token, which is exactly the current state: `rclone listremotes`
-        # listed it, so a presence-only check passed, and the run then failed deep
-        # inside restic with "empty token found" instead of naming the cause here.
-        # One directory listing distinguishes the two, and takes the same trip to
-        # the provider as the backup itself would.
         error "rclone remote '$REMOTE_NAME:' is defined but not usable -- offsite leg will be SKIPPED"
-        warn "The local repository will still be backed up."
         warn "Most often an expired or missing OAuth token. Re-authorise with:"
         warn "    rclone config reconnect ${REMOTE_NAME}:"
         notify "Backup Degraded" "rclone remote $REMOTE_NAME needs re-authorising; local backup still running" "warning"
@@ -261,8 +271,18 @@ if [ "$BACKEND" = "rclone" ]; then
 fi
 
 export RESTIC_PASSWORD_COMMAND="cat $RESTIC_PASSWORD_FILE"
+
+# --- Heal stale locks before touching either repository ---
+# Must run before the first restic command that takes a lock; otherwise an
+# interrupted previous run blocks this one (and the prune at the end of it).
+if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+    heal_lock "$RESTIC_REPOSITORY_LOCAL" "local"
+fi
+if [ "$REMOTE_AVAILABLE" -eq 1 ]; then
+    heal_lock "$RESTIC_REPOSITORY" "offsite"
+fi
+
 START_TS=$(date +%s)
-START_BYTES=$(restic -r "$RESTIC_REPOSITORY" stats 2>/dev/null | grep -oP 'Total size: \K[0-9]+' || echo "0")
 
 # ============================================================
 # Phase 1: PostgreSQL dump
@@ -271,7 +291,7 @@ if [ "$PG_ENABLED" = "true" ] && command -v pg_dumpall &>/dev/null; then
     header "Phase 1: PostgreSQL dump"
 
     PG_DUMP_FILE="$DUMPS_DIR/postgres.sql.gz"
-    PG_USER="${PG_USER:-$USER}"
+    PG_USER="${PG_USER:-$(whoami)}"
 
     if command -v pg_isready &>/dev/null && pg_isready -h "$PG_HOST" -p "$PG_PORT" &>/dev/null; then
         info "Dumping all PostgreSQL databases..."
@@ -285,7 +305,7 @@ if [ "$PG_ENABLED" = "true" ] && command -v pg_dumpall &>/dev/null; then
         if [ -f "$PG_DUMP_FILE" ] && [ -s "$PG_DUMP_FILE" ]; then
             SIZE=$(du -h "$PG_DUMP_FILE" | cut -f1)
             info "PostgreSQL dump complete: $SIZE"
-        elif [ $rc -ne 0 ]; then
+        elif [ "$rc" -ne 0 ]; then
             warn "PostgreSQL dump failed (exit $rc) — continuing without DB dump"
             rm -f "$PG_DUMP_FILE"
         else
@@ -308,40 +328,58 @@ if [ "$CONTAINERS_ENABLED" = "true" ]; then
     CONTAINER_DIR="$DUMPS_DIR/containers"
     mkdir -p "$CONTAINER_DIR"
 
-    # Podman quadlets
-    if [ -d "$HOME/.config/containers/systemd" ]; then
-        cp -r "$HOME/.config/containers" "$CONTAINER_DIR/podman/"
-        info "Backed up podman configs"
-    fi
+    # Detect container runtime
+    CONTAINER_RUNTIME=""
+    if command -v podman &>/dev/null; then CONTAINER_RUNTIME="podman"; fi
+    if command -v docker &>/dev/null; then CONTAINER_RUNTIME="docker"; fi
 
-    # Docker compose files (common locations)
-    for dir in "$HOME" "$HOME/Projects" "$HOME/Documents"; do
-        if [ -d "$dir" ]; then
-            find "$dir" -maxdepth 5 -name "docker-compose*.yml" -o -name "compose*.yml" -o -name "Dockerfile" 2>/dev/null \
-                | while IFS= read -r f; do
-                    rel="${f#$dir/}"
-                    mkdir -p "$CONTAINER_DIR/compose/$(dirname "$rel")"
-                    cp "$f" "$CONTAINER_DIR/compose/$rel" 2>/dev/null || true
-                done
+    if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+        # Podman quadlets
+        if [ -d "$HOME/.config/containers/systemd" ]; then
+            cp -r "$HOME/.config/containers" "$CONTAINER_DIR/podman/"
+            info "Backed up podman configs"
         fi
-    done
-    info "Collected container compose files"
-
-    # Docker config
-    if [ -f "$HOME/.docker/config.json" ]; then
-        mkdir -p "$CONTAINER_DIR/docker"
-        cp "$HOME/.docker/config.json" "$CONTAINER_DIR/docker/config.json" 2>/dev/null || true
+        if [ -d "/etc/containers" ]; then
+            mkdir -p "$CONTAINER_DIR/podman-system"
+            cp -r /etc/containers "$CONTAINER_DIR/podman-system/" 2>/dev/null || true
+            info "Backed up system podman configs"
+        fi
     fi
 
-    # Containerfile / Dockerfile in home
-    find "$HOME" -maxdepth 3 -name "Containerfile" -o -name "Dockerfile" 2>/dev/null \
+    if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+        # Docker compose files (common locations)
+        for dir in "$HOME" "$HOME/Projects" "$HOME/Documents" "/opt" "/var/www"; do
+            if [ -d "$dir" ]; then
+                find "$dir" -maxdepth 5 \( -name "docker-compose*.yml" -o -name "compose*.yml" -o -name "Dockerfile" \) 2>/dev/null \
+                    | while IFS= read -r f; do
+                        rel="${f#$dir/}"
+                        mkdir -p "$CONTAINER_DIR/compose/$(dirname "$rel")"
+                        cp "$f" "$CONTAINER_DIR/compose/$rel" 2>/dev/null || true
+                    done || true
+            fi
+        done
+        info "Collected docker compose files"
+
+        # Docker config
+        if [ -f "$HOME/.docker/config.json" ]; then
+            mkdir -p "$CONTAINER_DIR/docker"
+            cp "$HOME/.docker/config.json" "$CONTAINER_DIR/docker/config.json" 2>/dev/null || true
+        fi
+        if [ -f "/root/.docker/config.json" ] && [ -w "/root/.docker/config.json" ] 2>/dev/null; then
+            mkdir -p "$CONTAINER_DIR/docker-system"
+            cp /root/.docker/config.json "$CONTAINER_DIR/docker-system/config.json" 2>/dev/null || true
+        fi
+    fi
+
+    # Containerfile / Dockerfile in home and common locations
+    find "$HOME" -maxdepth 3 \( -name "Containerfile" -o -name "Dockerfile" \) 2>/dev/null \
         | head -20 | while IFS= read -r f; do
             rel="${f#$HOME/}"
             mkdir -p "$CONTAINER_DIR/containerfiles/$(dirname "$rel")"
             cp "$f" "$CONTAINER_DIR/containerfiles/$rel" 2>/dev/null || true
-        done
+        done || true
 
-    info "Container configuration backup complete"
+    info "Container configuration backup complete ($CONTAINER_RUNTIME)"
 fi
 
 # ============================================================
@@ -350,14 +388,11 @@ fi
 header "Phase 3: Restic filesystem backup"
 
 # Refresh the git mirrors before they are read. include.conf backs up
-# /home/deon/.git-mirror instead of /home/deon/dev, so the history that is
-# captured depends on this having just run. Doing it here rather than in cron
-# keeps the mirror and the snapshot consistent with each other, and means a
-# repo cloned since the last backup is still covered on the first run.
+# ~/.git-mirror instead of working trees, so the history captured depends
+# on this having just run. Doing it here keeps the mirror and snapshot
+# consistent.
 #
-# Failure is warned about, not fatal: a mirror left over from the previous run
-# is still real history, and skipping the whole backup over a git hiccup would
-# be a worse outcome than backing up slightly stale history.
+# Failure is warned about, not fatal: a stale mirror is still real history.
 if [ -f "$SCRIPT_DIR/git-mirror.sh" ]; then
     info "Refreshing git mirrors..."
     bash "$SCRIPT_DIR/git-mirror.sh" || warn "Git mirror refresh failed - backing up the previous mirror state"
@@ -367,10 +402,6 @@ fi
 
 BACKUP_TARGETS=()
 # build_targets <include_file> -> populates TARGETS_OUT
-#
-# Split out because the two repositories can have different scopes. Duplicated
-# inline it was impossible to give the remote a smaller path set than local,
-# which is what a quota-limited offsite target needs.
 build_targets() {
     local file="$1"
     local -n out_ref="$2"
@@ -415,6 +446,7 @@ RESTIC_COMMON_ARGS=()
 RESTIC_COMMON_ARGS+=(-o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M")
 RESTIC_COMMON_ARGS+=(--verbose)
 RESTIC_COMMON_ARGS+=(--tag "fedora-back-up")
+RESTIC_COMMON_ARGS+=(--tag "$ROLE")
 RESTIC_COMMON_ARGS+=(--tag "workstation")
 RESTIC_COMMON_ARGS+=(--host "$(hostname)")
 
@@ -428,16 +460,6 @@ info "Starting backup of ${#BACKUP_TARGETS[@]} target paths..."
 
 REPO_FAILED=0
 # Make sure a repository exists before backing up to it.
-#
-# There was no `restic init` anywhere in this script, so a repository that did not
-# yet exist failed at the first backup with "unable to open config file". That is
-# exactly the state of a newly created offsite folder: the remote was created,
-# nothing was ever initialised in it, and the first run would have failed for a
-# third reason after the path was corrected and the token re-authorised.
-#
-# Idempotent in both directions: an existing repository is left alone, and a repo
-# that exists but cannot be read (a wrong password, say) is reported rather than
-# being re-initialised over the top of.
 ensure_repo_initialized() {
     local repo="$1" label="$2"
     if restic -r "$repo" cat config >/dev/null 2>&1; then
@@ -449,7 +471,6 @@ ensure_repo_initialized() {
         return 0
     fi
     if restic -r "$repo" cat config >/dev/null 2>&1; then
-        # init reported failure but the repository is readable: it existed already.
         return 0
     fi
     error "[$label] Cannot initialise or read a repository at $repo"
@@ -478,17 +499,17 @@ run_repo_backup() {
 }
 
 # Local first: it is the copy that survives a failed upload.
-  if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
-      ensure_repo_initialized "$RESTIC_REPOSITORY_LOCAL" "local" || REPO_FAILED=1
-      run_repo_backup "$RESTIC_REPOSITORY_LOCAL" "local" BACKUP_TARGETS
-  else
-      warn "No local repository configured (RESTIC_REPOSITORY_LOCAL) - skipping local backup"
-  fi
+if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+    ensure_repo_initialized "$RESTIC_REPOSITORY_LOCAL" "local" || REPO_FAILED=1
+    run_repo_backup "$RESTIC_REPOSITORY_LOCAL" "local" BACKUP_TARGETS
+else
+    warn "No local repository configured (RESTIC_REPOSITORY_LOCAL) - skipping local backup"
+fi
 
-  OFFSITE_SKIPPED=0
-  if [ "$REMOTE_AVAILABLE" -eq 1 ]; then
-      ensure_repo_initialized "$RESTIC_REPOSITORY" "drive" || REPO_FAILED=1
-      run_repo_backup "$RESTIC_REPOSITORY" "drive" REMOTE_TARGETS
+OFFSITE_SKIPPED=0
+if [ "$REMOTE_AVAILABLE" -eq 1 ]; then
+    ensure_repo_initialized "$RESTIC_REPOSITORY" "offsite" || REPO_FAILED=1
+    run_repo_backup "$RESTIC_REPOSITORY" "offsite" REMOTE_TARGETS
 else
     warn "Offsite leg skipped: the rclone remote is not configured"
     OFFSITE_SKIPPED=1
@@ -497,8 +518,6 @@ fi
 
 if [ $REPO_FAILED -ne 0 ]; then
     if [ "$OFFSITE_SKIPPED" -eq 1 ] && [ "$REPO_FAILED" -eq 1 ]; then
-        # Only the offsite leg was skipped; the local backup is fine. Reporting
-        # this as a restic error points whoever reads it at the wrong subsystem.
         notify "Backup Degraded" "Local backup succeeded; offsite leg skipped (rclone remote not configured)" "warning"
     else
         notify "Backup Failed" "Restic backup error" "critical"
@@ -554,11 +573,15 @@ else
     DURATION_STR="${DURATION}s"
 fi
 
-SNAPSHOT_ID=$(restic -r "$RESTIC_REPOSITORY" snapshots --latest 1 --compact 2>/dev/null | grep -v "^ID\|^──\|^$" | awk '{print $1}' || echo "unknown")
+# Snapshot ID via JSON: the table output wraps tag lines and leads with a row
+# of dashes, which previously ended up printed as the snapshot id.
+SNAPSHOT_ID=$(restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq -r 'sort_by(.time) | last | .short_id // "unknown"' 2>/dev/null || echo "unknown")
 REPO_SIZE=$(restic -r "$RESTIC_REPOSITORY" stats 2>/dev/null | grep -oP 'Total size: \K.*' || echo "unknown")
 
 echo ""
 echo -e "  ${BOLD}Status:${NC}        ${GREEN}✓ Backup Successful${NC}"
+echo -e "  ${BOLD}Distro:${NC}        $DISTRO_ID $DISTRO_VERSION_ID"
+echo -e "  ${BOLD}Role:${NC}          $ROLE"
 echo -e "  ${BOLD}Duration:${NC}      $DURATION_STR"
 echo -e "  ${BOLD}Repository:${NC}    $RESTIC_REPOSITORY"
 echo -e "  ${BOLD}Repository Size:${NC} $REPO_SIZE"
@@ -576,28 +599,8 @@ header "Phase 5: Pruning old snapshots"
 if [ -f "$SCRIPT_DIR/fedora-back-up-prune.sh" ]; then
     info "Running prune script..."
     bash "$SCRIPT_DIR/fedora-back-up-prune.sh" --no-notify || warn "Prune completed with warnings"
-elif [ -f "$BIN_DIR/fedora-back-up-prune.sh" ]; then
-    info "Running prune script..."
-    bash "$BIN_DIR/fedora-back-up-prune.sh" --no-notify || warn "Prune completed with warnings"
 else
     warn "Prune script not found - skipping automatic pruning"
 fi
 
 exit 0
-
-
-
-# ============================================================
-# Health check
-# ============================================================
-
-
-
-
-
-
-
-
-
-heal_lock "$RESTIC_REPOSITORY_LOCAL" local
-heal_lock "$RESTIC_REPOSITORY" offsite
