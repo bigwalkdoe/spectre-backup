@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# fedora-back-up - Test suite
+# spectre-backup - Test suite
 #
 # Tests distro detection, role detection, config coverage,
 # restic output parsing, and shellcheck compliance across all scripts.
@@ -55,11 +55,11 @@ assert_dir_exists() {
     fi
 }
 
-# shellcheck source=../lib/backup-common.sh
-. "$PROJECT_DIR/lib/backup-common.sh"
+# shellcheck source=../lib/spectre-backup-common.sh
+. "$PROJECT_DIR/lib/spectre-backup-common.sh"
 
 echo "============================================================"
-echo "fedora-back-up test suite"
+echo "spectre-backup test suite"
 echo "============================================================"
 echo ""
 
@@ -100,29 +100,29 @@ else
 fi
 
 # Test env var override
-export FEDORA_BACK_UP_ROLE=server
+export SPECTRE_BACKUP_ROLE=server
 TOTAL=$((TOTAL + 1))
 ROLE_OVERRIDE=$(detect_role)
 if [ "$ROLE_OVERRIDE" = "server" ]; then
-    echo "  PASS: FEDORA_BACK_UP_ROLE=server overrides auto-detect"
+    echo "  PASS: SPECTRE_BACKUP_ROLE=server overrides auto-detect"
     PASS=$((PASS + 1))
 else
-    echo "  FAIL: FEDORA_BACK_UP_ROLE=server returned '$ROLE_OVERRIDE'"
+    echo "  FAIL: SPECTRE_BACKUP_ROLE=server returned '$ROLE_OVERRIDE'"
     FAIL=$((FAIL + 1))
 fi
-unset FEDORA_BACK_UP_ROLE
+unset SPECTRE_BACKUP_ROLE
 
-export FEDORA_BACK_UP_ROLE=workstation
+export SPECTRE_BACKUP_ROLE=workstation
 TOTAL=$((TOTAL + 1))
 ROLE_OVERRIDE=$(detect_role)
 if [ "$ROLE_OVERRIDE" = "workstation" ]; then
-    echo "  PASS: FEDORA_BACK_UP_ROLE=workstation overrides auto-detect"
+    echo "  PASS: SPECTRE_BACKUP_ROLE=workstation overrides auto-detect"
     PASS=$((PASS + 1))
 else
-    echo "  FAIL: FEDORA_BACK_UP_ROLE=workstation returned '$ROLE_OVERRIDE'"
+    echo "  FAIL: SPECTRE_BACKUP_ROLE=workstation returned '$ROLE_OVERRIDE'"
     FAIL=$((FAIL + 1))
 fi
-unset FEDORA_BACK_UP_ROLE
+unset SPECTRE_BACKUP_ROLE
 
 # -------------------------------------------------------------
 # Test group: config coverage
@@ -153,7 +153,7 @@ assert_file_exists "Root .env.example" "$PROJECT_DIR/config/.env.example"
 echo ""
 echo "--- Scripts ---"
 
-for script in fedora-back-up-install.sh fedora-back-up.sh fedora-back-up-restore.sh fedora-back-up-verify.sh fedora-back-up-prune.sh git-mirror.sh; do
+for script in spectre-backup-install.sh spectre-backup.sh spectre-backup-restore.sh spectre-backup-verify.sh spectre-backup-prune.sh git-mirror.sh; do
     assert_file_exists "Script: $script" "$PROJECT_DIR/scripts/$script"
     TOTAL=$((TOTAL + 1))
     if [ -x "$PROJECT_DIR/scripts/$script" ]; then
@@ -171,7 +171,7 @@ done
 echo ""
 echo "--- Syntax checks ---"
 
-for script in lib/backup-common.sh scripts/*.sh; do
+for script in lib/*.sh scripts/*.sh; do
     file="$PROJECT_DIR/$script"
     TOTAL=$((TOTAL + 1))
     if bash -n "$file" 2>/dev/null; then
@@ -190,7 +190,7 @@ echo ""
 echo "--- Shellcheck ---"
 
 if command -v shellcheck >/dev/null 2>&1; then
-    for script in lib/backup-common.sh scripts/*.sh; do
+    for script in lib/*.sh scripts/*.sh; do
         file="$PROJECT_DIR/$script"
         TOTAL=$((TOTAL + 1))
         # Only fail on errors (level error), not warnings/info
@@ -222,7 +222,7 @@ echo "--- Snapshot tags ---"
 # made workstations carry a duplicate and would mislabel servers.
 
 TOTAL=$((TOTAL + 1))
-if grep -n -- '--tag "workstation"' "$PROJECT_DIR/scripts/fedora-back-up.sh" >/dev/null 2>&1; then
+if grep -n -- '--tag "workstation"' "$PROJECT_DIR/scripts/spectre-backup.sh" >/dev/null 2>&1; then
     echo "  FAIL: hardcoded workstation tag in backup script"
     FAIL=$((FAIL + 1))
 else
@@ -231,7 +231,7 @@ else
 fi
 
 TOTAL=$((TOTAL + 1))
-if grep -n -- '--tag "$ROLE"' "$PROJECT_DIR/scripts/fedora-back-up.sh" >/dev/null 2>&1; then
+if grep -n -- '--tag "$ROLE"' "$PROJECT_DIR/scripts/spectre-backup.sh" >/dev/null 2>&1; then
     echo "  PASS: role tag comes from \$ROLE"
     PASS=$((PASS + 1))
 else
@@ -292,9 +292,62 @@ fi
 echo ""
 echo "--- Systemd units ---"
 
-assert_file_exists "User service"    "$PROJECT_DIR/systemd/fedora-back-up.service"
-assert_file_exists "System service"  "$PROJECT_DIR/systemd/fedora-back-up-system.service"
-assert_file_exists "Timer"           "$PROJECT_DIR/systemd/fedora-back-up.timer"
+assert_file_exists "User service"    "$PROJECT_DIR/systemd/spectre-backup.service"
+assert_file_exists "System service"  "$PROJECT_DIR/systemd/spectre-backup-system.service"
+assert_file_exists "Timer"           "$PROJECT_DIR/systemd/spectre-backup.timer"
+
+# -------------------------------------------------------------
+# Test group: naming guards
+# -------------------------------------------------------------
+echo ""
+echo "--- Naming guards ---"
+
+# The old product name must not survive anywhere in the code surface.
+# (tests/ is excluded so this guard's own pattern text cannot self-match.)
+TOTAL=$((TOTAL + 1))
+stragglers=$(grep -rEn 'fedora-back-up|FEDORA_BACK_UP|fedora_back_up' \
+    "$PROJECT_DIR/scripts" "$PROJECT_DIR/lib" "$PROJECT_DIR/systemd" "$PROJECT_DIR/config" 2>/dev/null || true)
+if [ -z "$stragglers" ]; then
+    echo "  PASS: no old product name in scripts/lib/systemd/config"
+    PASS=$((PASS + 1))
+else
+    echo "  FAIL: old product name found:"
+    echo "$stragglers" | head -20
+    FAIL=$((FAIL + 1))
+fi
+
+# All renamed files must exist under their new names.
+for f in scripts/spectre-backup.sh scripts/spectre-backup-install.sh \
+         scripts/spectre-backup-restore.sh scripts/spectre-backup-verify.sh \
+         scripts/spectre-backup-prune.sh lib/spectre-backup-common.sh \
+         systemd/spectre-backup.service systemd/spectre-backup.timer \
+         systemd/spectre-backup-system.service; do
+    assert_file_exists "Renamed file: $f" "$PROJECT_DIR/$f"
+done
+
+# The shared library must be referenced only under its new name.
+TOTAL=$((TOTAL + 1))
+librefs=$(grep -rn 'backup-common\.sh' \
+    "$PROJECT_DIR/scripts" "$PROJECT_DIR/lib" "$PROJECT_DIR/systemd" "$PROJECT_DIR/tests" 2>/dev/null \
+    | grep -v 'spectre-backup-common\.sh' || true)
+if [ -z "$librefs" ]; then
+    echo "  PASS: shared library referenced only as spectre-backup-common.sh"
+    PASS=$((PASS + 1))
+else
+    echo "  FAIL: legacy library reference found:"
+    echo "$librefs" | head -10
+    FAIL=$((FAIL + 1))
+fi
+
+# New snapshots carry the product tag alongside the role tag.
+TOTAL=$((TOTAL + 1))
+if grep -q -- '--tag "spectre-backup"' "$PROJECT_DIR/scripts/spectre-backup.sh"; then
+    echo "  PASS: product tag is spectre-backup"
+    PASS=$((PASS + 1))
+else
+    echo "  FAIL: product tag is not spectre-backup"
+    FAIL=$((FAIL + 1))
+fi
 
 # -------------------------------------------------------------
 # Summary

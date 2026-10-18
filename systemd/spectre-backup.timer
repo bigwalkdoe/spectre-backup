@@ -1,5 +1,5 @@
 [Unit]
-Description=fedora-back-up Timer - daily workstation/server backup
+Description=spectre-backup Timer - daily workstation/server backup
 Documentation=https://github.com/bigwalkdoe/spectre-backup
 
 [Timer]

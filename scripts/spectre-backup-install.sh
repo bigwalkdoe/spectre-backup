@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# fedora-back-up - Installer
+# spectre-backup - Installer
 # Multi-distro (Fedora, Ubuntu), multi-role (workstation, server).
 # ============================================================
 set -euo pipefail
@@ -9,8 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Source shared library
-# shellcheck source=../lib/backup-common.sh
-. "$PROJECT_DIR/lib/backup-common.sh"
+# shellcheck source=../lib/spectre-backup-common.sh
+. "$PROJECT_DIR/lib/spectre-backup-common.sh"
 
 # --- Parse arguments ---
 ROLE=""
@@ -67,7 +67,7 @@ info "Config source: $CONFIG_SOURCE"
 
 # --- Where to install config ---
 if [ "$ROLE" = "server" ]; then
-    INSTALL_CONFIG_DIR="/etc/fedora-back-up"
+    INSTALL_CONFIG_DIR="/etc/spectre-backup"
 else
     INSTALL_CONFIG_DIR="$CONFIG_DIR"
 fi
@@ -112,7 +112,7 @@ fi
 # ============================================================
 header "Step 3: Installing scripts"
 
-for script in fedora-back-up.sh fedora-back-up-restore.sh fedora-back-up-verify.sh fedora-back-up-prune.sh git-mirror.sh; do
+for script in spectre-backup.sh spectre-backup-restore.sh spectre-backup-verify.sh spectre-backup-prune.sh git-mirror.sh; do
     src="$PROJECT_DIR/scripts/$script"
     dest="$BIN_DIR/$script"
     if [ -f "$src" ]; then
@@ -128,8 +128,8 @@ for script in fedora-back-up.sh fedora-back-up-restore.sh fedora-back-up-verify.
 done
 
 # Install shared library alongside scripts
-lib_src="$PROJECT_DIR/lib/backup-common.sh"
-lib_dest="$BIN_DIR/backup-common.sh"
+lib_src="$PROJECT_DIR/lib/spectre-backup-common.sh"
+lib_dest="$BIN_DIR/spectre-backup-common.sh"
 if [ -f "$lib_src" ]; then
     rm -f "$lib_dest"
     cp "$lib_src" "$lib_dest"
@@ -140,8 +140,8 @@ else
 fi
 
 # Symlink for systemd and convenience
-ln -sf "$BIN_DIR/fedora-back-up.sh" "$BIN_DIR/fedora-back-up"
-info "Symlink: $BIN_DIR/fedora-back-up -> $BIN_DIR/fedora-back-up.sh"
+ln -sf "$BIN_DIR/spectre-backup.sh" "$BIN_DIR/spectre-backup"
+info "Symlink: $BIN_DIR/spectre-backup -> $BIN_DIR/spectre-backup.sh"
 
 # ============================================================
 # Step 4: Create configuration
@@ -199,16 +199,16 @@ fi
 # ============================================================
 header "Step 5: Configuring rclone for offsite storage"
 
-if check_cmd rclone && rclone listremotes 2>/dev/null | grep -q "^fedora-back-up:"; then
-    info "rclone remote 'fedora-back-up:' already configured"
+if check_cmd rclone && rclone listremotes 2>/dev/null | grep -q "^spectre-backup:"; then
+    info "rclone remote 'spectre-backup:' already configured"
 else
     echo ""
-    echo -e "${YELLOW}rclone remote 'fedora-back-up:' not found.${NC}"
+    echo -e "${YELLOW}rclone remote 'spectre-backup:' not found.${NC}"
     echo -e "You need to authenticate rclone with your offsite storage (Google Drive, S3, etc.)."
     echo -e ""
     echo -e "When prompted:"
     echo -e "  1. Select ${BOLD}n${NC} for 'New remote'"
-    echo -e "  2. Name: ${BOLD}fedora-back-up${NC}"
+    echo -e "  2. Name: ${BOLD}spectre-backup${NC}"
     echo -e "  3. Type: choose your storage backend (drive, s3, etc.)"
     echo -e "  4. Follow the auth flow"
     echo -e ""
@@ -232,16 +232,16 @@ fi
 # ============================================================
 header "Step 6: Validating offsite access"
 
-if check_cmd rclone && rclone listremotes 2>/dev/null | grep -q "^fedora-back-up:"; then
+if check_cmd rclone && rclone listremotes 2>/dev/null | grep -q "^spectre-backup:"; then
     info "Testing offsite access..."
-    if timeout 30 rclone lsd "fedora-back-up:" >/dev/null 2>&1; then
-        info "Offsite remote 'fedora-back-up:' is accessible"
+    if timeout 30 rclone lsd "spectre-backup:" >/dev/null 2>&1; then
+        info "Offsite remote 'spectre-backup:' is accessible"
     else
         warn "Offsite remote exists but is not usable (may need re-authorisation)"
-        warn "Run: rclone config reconnect fedora-back-up:"
+        warn "Run: rclone config reconnect spectre-backup:"
     fi
 else
-    warn "No 'fedora-back-up:' rclone remote configured. Offsite backups will be skipped."
+    warn "No 'spectre-backup:' rclone remote configured. Offsite backups will be skipped."
     info "Run 'rclone config' to add one, then re-run the installer."
 fi
 
@@ -312,7 +312,7 @@ if [ "$INSTALL_BIN_ONLY" = true ]; then
 else
     header "Step 8: Initializing Restic repository"
 
-    REPO="rclone:fedora-back-up:"
+    REPO="rclone:spectre-backup:"
     export RESTIC_PASSWORD_COMMAND="cat $PASSWORD_FILE"
     if restic -r "$REPO" snapshots >/dev/null 2>&1; then
         info "Restic repository already initialized"
@@ -321,7 +321,7 @@ else
         if restic -r "$REPO" init; then
             info "Repository initialized"
         else
-            warn "Repository initialization failed - you can retry later with: fedora-back-up.sh"
+            warn "Repository initialization failed - you can retry later with: spectre-backup.sh"
         fi
     fi
 fi
@@ -338,46 +338,46 @@ else
         # System service (runs as root, no user session needed)
         SYSTEMD_DIR="/etc/systemd/system"
         sudo mkdir -p "$SYSTEMD_DIR"
-        sudo cp "$PROJECT_DIR/systemd/fedora-back-up.service" "$SYSTEMD_DIR/"
-        sudo cp "$PROJECT_DIR/systemd/fedora-back-up.timer" "$SYSTEMD_DIR/"
+        sudo cp "$PROJECT_DIR/systemd/spectre-backup.service" "$SYSTEMD_DIR/"
+        sudo cp "$PROJECT_DIR/systemd/spectre-backup.timer" "$SYSTEMD_DIR/"
         sudo systemctl daemon-reload
 
-        if systemctl is-enabled fedora-back-up.timer &>/dev/null 2>&1; then
+        if systemctl is-enabled spectre-backup.timer &>/dev/null 2>&1; then
             info "Timer already enabled"
         else
-            sudo systemctl enable fedora-back-up.timer
+            sudo systemctl enable spectre-backup.timer
             info "Timer enabled"
         fi
-        if systemctl is-active fedora-back-up.timer &>/dev/null 2>&1; then
+        if systemctl is-active spectre-backup.timer &>/dev/null 2>&1; then
             info "Timer already active"
         else
-            sudo systemctl start fedora-back-up.timer
+            sudo systemctl start spectre-backup.timer
             info "Timer started"
         fi
         info "Timer status:"
-        systemctl status fedora-back-up.timer --no-pager 2>&1 | head -10 || true
+        systemctl status spectre-backup.timer --no-pager 2>&1 | head -10 || true
     else
         # User service (runs as the logged-in user)
         SYSTEMD_USER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/systemd/user"
         mkdir -p "$SYSTEMD_USER_DIR"
-        cp "$PROJECT_DIR/systemd/fedora-back-up.service" "$SYSTEMD_USER_DIR/"
-        cp "$PROJECT_DIR/systemd/fedora-back-up.timer" "$SYSTEMD_USER_DIR/"
+        cp "$PROJECT_DIR/systemd/spectre-backup.service" "$SYSTEMD_USER_DIR/"
+        cp "$PROJECT_DIR/systemd/spectre-backup.timer" "$SYSTEMD_USER_DIR/"
         systemctl --user daemon-reload
 
-        if systemctl --user is-enabled fedora-back-up.timer &>/dev/null 2>&1; then
+        if systemctl --user is-enabled spectre-backup.timer &>/dev/null 2>&1; then
             info "Timer already enabled"
         else
-            systemctl --user enable fedora-back-up.timer
+            systemctl --user enable spectre-backup.timer
             info "Timer enabled"
         fi
-        if systemctl --user is-active fedora-back-up.timer &>/dev/null 2>&1; then
+        if systemctl --user is-active spectre-backup.timer &>/dev/null 2>&1; then
             info "Timer already active"
         else
-            systemctl --user start fedora-back-up.timer
+            systemctl --user start spectre-backup.timer
             info "Timer started"
         fi
         info "Timer status:"
-        systemctl --user status fedora-back-up.timer --no-pager 2>&1 | head -10 || true
+        systemctl --user status spectre-backup.timer --no-pager 2>&1 | head -10 || true
     fi
 fi
 
@@ -412,7 +412,7 @@ else
                 ;;
         esac
     else
-        warn "Non-interactive mode: skipping test backup. Run: $BIN_DIR/fedora-back-up.sh"
+        warn "Non-interactive mode: skipping test backup. Run: $BIN_DIR/spectre-backup.sh"
     fi
 fi
 
@@ -421,27 +421,27 @@ fi
 # ============================================================
 header "Installation Complete"
 
-echo -e "${GREEN}${BOLD}fedora-back-up installed!${NC}"
+echo -e "${GREEN}${BOLD}spectre-backup installed!${NC}"
 echo ""
 echo -e "  Distro:        ${BOLD}$DISTRO_ID $DISTRO_VERSION_ID${NC}"
 echo -e "  Role:          ${BOLD}$ROLE${NC}"
 echo -e "  Config dir:    ${BOLD}$INSTALL_CONFIG_DIR${NC}"
 echo -e "  State/logs:    ${BOLD}$STATE_DIR${NC}"
 echo -e "  Scripts:       ${BOLD}$BIN_DIR${NC}"
-echo -e "  Repository:    ${BOLD}${REPO:-rclone:fedora-back-up:}${NC}"
+echo -e "  Repository:    ${BOLD}${REPO:-rclone:spectre-backup:}${NC}"
 echo ""
 echo -e "Next steps:"
 echo -e "  1. Edit ${BOLD}$INSTALL_CONFIG_DIR/.env${NC} if needed"
 echo -e "  2. Edit ${BOLD}$INSTALL_CONFIG_DIR/include.conf${NC} to add/remove backup paths"
 echo -e "  3. Edit ${BOLD}$INSTALL_CONFIG_DIR/exclude.conf${NC} to customize exclusions"
-echo -e "  4. Run ${BOLD}$BIN_DIR/fedora-back-up.sh${NC} for a full backup"
-echo -e "  5. Run ${BOLD}$BIN_DIR/fedora-back-up-restore.sh${NC} to test restoration"
+echo -e "  4. Run ${BOLD}$BIN_DIR/spectre-backup.sh${NC} for a full backup"
+echo -e "  5. Run ${BOLD}$BIN_DIR/spectre-backup-restore.sh${NC} to test restoration"
 echo ""
 echo -e "  Timer runs daily at 04:00. Check with:"
 if [ "$ROLE" = "server" ]; then
-    echo -e "    ${BOLD}systemctl status fedora-back-up.timer${NC}"
-    echo -e "    ${BOLD}journalctl -u fedora-back-up.service -f${NC}"
+    echo -e "    ${BOLD}systemctl status spectre-backup.timer${NC}"
+    echo -e "    ${BOLD}journalctl -u spectre-backup.service -f${NC}"
 else
-    echo -e "    ${BOLD}systemctl --user status fedora-back-up.timer${NC}"
-    echo -e "    ${BOLD}journalctl --user -u fedora-back-up.service -f${NC}"
+    echo -e "    ${BOLD}systemctl --user status spectre-backup.timer${NC}"
+    echo -e "    ${BOLD}journalctl --user -u spectre-backup.service -f${NC}"
 fi

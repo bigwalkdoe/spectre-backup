@@ -1,19 +1,19 @@
 [Unit]
-Description=fedora-back-up - Encrypted versioned server backup
+Description=spectre-backup - Encrypted versioned server backup
 Documentation=https://github.com/bigwalkdoe/spectre-backup
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/root/.local/bin/fedora-back-up.sh
+ExecStart=/root/.local/bin/spectre-backup.sh
 User=root
 Group=root
 Environment=HOME=/root
 Environment=XDG_CONFIG_HOME=/root/.config
 Environment=XDG_DATA_HOME=/root/.local/share
 Environment=XDG_STATE_HOME=/root/.local/state
-Environment=FEDORA_BACK_UP_ROLE=server
+Environment=SPECTRE_BACKUP_ROLE=server
 StandardOutput=journal
 StandardError=journal
 Nice=19

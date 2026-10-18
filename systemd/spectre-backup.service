@@ -1,12 +1,12 @@
 [Unit]
-Description=fedora-back-up - Encrypted versioned workstation backup
+Description=spectre-backup - Encrypted versioned workstation backup
 Documentation=https://github.com/bigwalkdoe/spectre-backup
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/fedora-back-up.sh
+ExecStart=%h/.local/bin/spectre-backup.sh
 User=%u
 Group=%u
 Environment=HOME=%h

@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================
-# fedora-back-up - Restore / Disaster Recovery
+# spectre-backup - Restore / Disaster Recovery
 #
 # Usage:
-#   fedora-back-up-restore.sh                    # Restore latest snapshot
-#   fedora-back-up-restore.sh --list             # List snapshots
-#   fedora-back-up-restore.sh --snapshot <id>    # Restore specific snapshot
-#   fedora-back-up-restore.sh --dry-run          # Preview restore
+#   spectre-backup-restore.sh                    # Restore latest snapshot
+#   spectre-backup-restore.sh --list             # List snapshots
+#   spectre-backup-restore.sh --snapshot <id>    # Restore specific snapshot
+#   spectre-backup-restore.sh --dry-run          # Preview restore
 # ============================================================
 set -euo pipefail
 
@@ -14,24 +14,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- Source shared library ---
-if [ -f "$SCRIPT_DIR/backup-common.sh" ]; then
-    . "$SCRIPT_DIR/backup-common.sh"
-elif [ -f "$PROJECT_DIR/lib/backup-common.sh" ]; then
-    . "$PROJECT_DIR/lib/backup-common.sh"
+if [ -f "$SCRIPT_DIR/spectre-backup-common.sh" ]; then
+    . "$SCRIPT_DIR/spectre-backup-common.sh"
+elif [ -f "$PROJECT_DIR/lib/spectre-backup-common.sh" ]; then
+    . "$PROJECT_DIR/lib/spectre-backup-common.sh"
 else
-    echo "ERROR: Cannot find backup-common.sh library" >&2
+    echo "ERROR: Cannot find spectre-backup-common.sh library" >&2
     exit 1
 fi
 
 detect_distro
-ROLE="${FEDORA_BACK_UP_ROLE:-$(detect_role)}"
+ROLE="${SPECTRE_BACKUP_ROLE:-$(detect_role)}"
 resolve_dirs
 
 # --- Config directory ---
 if [ "$ROLE" = "server" ]; then
-    CONFIG_DIR="/etc/fedora-back-up"
+    CONFIG_DIR="/etc/spectre-backup"
 else
-    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/spectre-backup"
 fi
 
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
@@ -55,7 +55,7 @@ for arg in "$@"; do
         --list|--snapshots) JUST_LIST=true ;;
         --snapshot=*) RESTORE_SNAPSHOT="${arg#*=}" ;;
         --dry-run) DRY_RUN=true ;;
-        --role=*) FEDORA_BACK_UP_ROLE="${arg#*=}" ;;
+        --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [--list] [--snapshot=<id>] [--dry-run] [--role=workstation|server]"
             echo ""
@@ -72,9 +72,9 @@ done
 if [ -f "$CONFIG_DIR/.env" ]; then
     set -a; source "$CONFIG_DIR/.env"; set +a
 fi
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:spectre-backup:}"
 export RESTIC_PASSWORD_COMMAND="cat $RESTIC_PASSWORD_FILE"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
 LOG_DIR="${LOG_DIR:-$STATE_DIR}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/restore-$(date +%Y%m%d-%H%M%S).log"
@@ -97,8 +97,8 @@ for cmd in restic rclone; do
     fi
 done
 
-if ! rclone listremotes 2>/dev/null | grep -q "^fedora-back-up:"; then
-    error "rclone remote 'fedora-back-up:' not found"
+if ! rclone listremotes 2>/dev/null | grep -q "^spectre-backup:"; then
+    error "rclone remote 'spectre-backup:' not found"
     echo "Run: rclone config"
     exit 1
 fi

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# fedora-back-up - Snapshot Pruning
+# spectre-backup - Snapshot Pruning
 #
 # Enforces retention policy:
 #   Hourly:    last 24
@@ -10,9 +10,9 @@
 #   Yearly:    keep all (no limit specified)
 #
 # Usage:
-#   fedora-back-up-prune.sh           # Prune and notify
-#   fedora-back-up-prune.sh --dry-run # Preview only
-#   fedora-back-up-prune.sh --no-notify # Silent (for automated runs)
+#   spectre-backup-prune.sh           # Prune and notify
+#   spectre-backup-prune.sh --dry-run # Preview only
+#   spectre-backup-prune.sh --no-notify # Silent (for automated runs)
 # ============================================================
 set -euo pipefail
 
@@ -20,28 +20,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- Source shared library ---
-if [ -f "$SCRIPT_DIR/backup-common.sh" ]; then
-    . "$SCRIPT_DIR/backup-common.sh"
-elif [ -f "$PROJECT_DIR/lib/backup-common.sh" ]; then
-    . "$PROJECT_DIR/lib/backup-common.sh"
+if [ -f "$SCRIPT_DIR/spectre-backup-common.sh" ]; then
+    . "$SCRIPT_DIR/spectre-backup-common.sh"
+elif [ -f "$PROJECT_DIR/lib/spectre-backup-common.sh" ]; then
+    . "$PROJECT_DIR/lib/spectre-backup-common.sh"
 else
-    echo "ERROR: Cannot find backup-common.sh library" >&2
+    echo "ERROR: Cannot find spectre-backup-common.sh library" >&2
     exit 1
 fi
 
 detect_distro
-ROLE="${FEDORA_BACK_UP_ROLE:-$(detect_role)}"
+ROLE="${SPECTRE_BACKUP_ROLE:-$(detect_role)}"
 resolve_dirs
 
 # --- Config directory ---
 if [ "$ROLE" = "server" ]; then
-    CONFIG_DIR="/etc/fedora-back-up"
+    CONFIG_DIR="/etc/spectre-backup"
 else
-    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/spectre-backup"
 fi
 
 RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
@@ -57,7 +57,7 @@ for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=true ;;
         --no-notify) SEND_NOTIFY=false ;;
-        --role=*) FEDORA_BACK_UP_ROLE="${arg#*=}" ;;
+        --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [--dry-run] [--no-notify] [--role=workstation|server]"
             echo ""
@@ -84,7 +84,7 @@ PRUNE_TIMEOUT="${PRUNE_TIMEOUT:-900}"
 if [ -n "${PRUNE_TARGETS_OVERRIDE:-}" ]; then
     read -ra PRUNE_TARGETS <<< "$PRUNE_TARGETS_OVERRIDE"
 fi
-[ "${#PRUNE_TARGETS[@]}" -eq 0 ] && PRUNE_TARGETS=("rclone:fedora-back-up:")
+[ "${#PRUNE_TARGETS[@]}" -eq 0 ] && PRUNE_TARGETS=("rclone:spectre-backup:")
 export RESTIC_PASSWORD_COMMAND="cat $RESTIC_PASSWORD_FILE"
 
 mkdir -p "$STATE_DIR"
@@ -232,5 +232,5 @@ info "Pruning complete."
 
 # --- Notify ---
 if [ "$SEND_NOTIFY" = true ] && [ "$DRY_RUN" = false ] && command -v notify-send &>/dev/null; then
-    notify-send -u low "fedora-back-up" "Pruning complete: $SNAPSHOTS_LEFT snapshots, $REPO_SIZE"
+    notify-send -u low "spectre-backup" "Pruning complete: $SNAPSHOTS_LEFT snapshots, $REPO_SIZE"
 fi

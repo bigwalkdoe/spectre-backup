@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# fedora-back-up - Main Backup Engine
+# spectre-backup - Main Backup Engine
 # Encrypted, versioned backup via Restic + rclone.
 # Supports Fedora/Ubuntu, workstation/server roles.
 # ============================================================
@@ -11,27 +11,27 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- Source shared library ---
 # Look alongside the script first (installed location), then project dir (dev).
-if [ -f "$SCRIPT_DIR/backup-common.sh" ]; then
-    . "$SCRIPT_DIR/backup-common.sh"
-elif [ -f "$PROJECT_DIR/lib/backup-common.sh" ]; then
-    . "$PROJECT_DIR/lib/backup-common.sh"
+if [ -f "$SCRIPT_DIR/spectre-backup-common.sh" ]; then
+    . "$SCRIPT_DIR/spectre-backup-common.sh"
+elif [ -f "$PROJECT_DIR/lib/spectre-backup-common.sh" ]; then
+    . "$PROJECT_DIR/lib/spectre-backup-common.sh"
 else
-    echo "ERROR: Cannot find backup-common.sh library" >&2
+    echo "ERROR: Cannot find spectre-backup-common.sh library" >&2
     exit 1
 fi
 
 # --- Detect distro and role ---
 detect_distro
-ROLE="${FEDORA_BACK_UP_ROLE:-$(detect_role)}"
+ROLE="${SPECTRE_BACKUP_ROLE:-$(detect_role)}"
 resolve_dirs
 
 # --- Config directory (system-wide for servers, user for workstations) ---
 if [ "$ROLE" = "server" ]; then
-    CONFIG_DIR="/etc/fedora-back-up"
+    CONFIG_DIR="/etc/spectre-backup"
 else
-    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
+    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/spectre-backup"
 fi
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
 
 # --- Load environment ---
 load_env || true
@@ -41,7 +41,7 @@ RESTIC_PASSWORD_FILE="${RESTIC_PASSWORD_FILE:-$CONFIG_DIR/password}"
 INCLUDE_FILE="${INCLUDE_FILE:-$CONFIG_DIR/include.conf}"
 EXCLUDE_FILE="${EXCLUDE_FILE:-$CONFIG_DIR/exclude.conf}"
 INCLUDE_FILE_REMOTE="${INCLUDE_FILE_REMOTE:-$CONFIG_DIR/include-remote.conf}"
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:spectre-backup:}"
 NOTIFY_ENABLED="${NOTIFY_ENABLED:-true}"
 NOTIFY_DESKTOP="${NOTIFY_DESKTOP:-true}"
 PG_ENABLED="${PG_ENABLED:-true}"
@@ -448,7 +448,7 @@ RESTIC_COMMON_ARGS+=(--verbose)
 # Tags: product name plus the detected role. The role must come from $ROLE --
 # a leftover hardcoded "workstation" tag duplicated it on workstations and
 # would have mislabelled every server snapshot.
-RESTIC_COMMON_ARGS+=(--tag "fedora-back-up")
+RESTIC_COMMON_ARGS+=(--tag "spectre-backup")
 RESTIC_COMMON_ARGS+=(--tag "$ROLE")
 RESTIC_COMMON_ARGS+=(--host "$(hostname)")
 
@@ -602,9 +602,9 @@ notify "✓ Backup Successful" "Duration: $DURATION_STR | Snapshot: $SNAPSHOT_ID
 # ============================================================
 header "Phase 5: Pruning old snapshots"
 
-if [ -f "$SCRIPT_DIR/fedora-back-up-prune.sh" ]; then
+if [ -f "$SCRIPT_DIR/spectre-backup-prune.sh" ]; then
     info "Running prune script..."
-    bash "$SCRIPT_DIR/fedora-back-up-prune.sh" --no-notify || warn "Prune completed with warnings"
+    bash "$SCRIPT_DIR/spectre-backup-prune.sh" --no-notify || warn "Prune completed with warnings"
 else
     warn "Prune script not found - skipping automatic pruning"
 fi

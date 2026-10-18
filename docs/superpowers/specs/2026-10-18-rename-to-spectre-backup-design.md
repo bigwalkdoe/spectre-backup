@@ -24,8 +24,9 @@ still say `fedora-back-up` when this is done.
   repository directory, rclone remote section, installed scripts, user units.
 - Backups continue to work across the migration: the same restic snapshots
   stay accessible in both repositories, and the timer keeps its schedule.
-- The migration is repeatable: it is driven by the installer, so the Ubuntu
-  machine converts the same way with the same code path.
+- The migration is repeatable: it is driven by the installer, so any
+  workstation-shaped legacy install converts with the same code path;
+  server-shaped leftovers are handled by documented steps.
 
 ## Non-goals and anti-goals
 
@@ -59,9 +60,11 @@ Anti-goals (would make this a failure even if it "works"):
 - The rclone remote is a single section (`[fedora-back-up]`, `type=drive`,
   `root_folder_id`); renaming the section touches no remote data.
 - Restic repositories are self-contained; only `.env` names their location.
-- The currently installed user timer must keep working until the replacement
-  units are in place (no gap), and the next run is not due until tomorrow
-  04:35 PKT.
+- The next scheduled run is not due until tomorrow 04:35 PKT, so the
+  migration window can be made safe by disabling the old timer at the
+  start, arming the new timer in the same session, and running a manual
+  verified backup in between. "No gap" means no long-lived window with no
+  armed timer — not literally zero seconds of transition.
 
 ## Decisions (owner-approved)
 
@@ -106,14 +109,20 @@ New snapshot tag set: `spectre-backup`, plus the role (`workstation` or
 ## Live migration (this machine)
 
 The new installer detects a legacy install and migrates it. Ordering is
-chosen so the repository is always reachable at the path `.env` names:
+chosen so the repository is always reachable at the path `.env` names.
+Scope: the migration automates the workstation shape (the only shape ever
+deployed); a server-shaped legacy install (`/etc/<name>` config, system
+units) is covered by guide steps, since those moves need root and are not
+automated.
 
 1. **Pre-flight** — confirm no backup is running and the timer's next fire is
    in the future; archive copies of `.env` and `rclone.conf` into the state
    dir (`migration-backup-<timestamp>/`) for rollback.
 2. **Stop the old schedule** — `systemctl --user disable --now
-   fedora-back-up.timer`. Old unit files remain until the replacements are
-   installed (no gap for the new units).
+   fedora-back-up.timer`, *before* anything is touched, so it cannot fire
+   mid-migration against half-renamed state. The new timer is armed in the
+   same session (step 8) and a manual backup verifies (step 10) well before
+   the next slot at 04:35.
 3. **Rename the rclone section** — rewrite `[fedora-back-up]` →
    `[spectre-backup]` in `~/.config/rclone/rclone.conf`; verify with
    `rclone lsd spectre-backup:`.
@@ -141,9 +150,14 @@ chosen so the repository is always reachable at the path `.env` names:
     must carry the new tags and the old snapshots must still be listed.
 
 Migration logic rules: only act when the legacy shape is *exactly* present
-(old dir exists, new does not); every step is idempotent; every action is
-logged with before/after; if any step cannot be completed safely, stop and
-report rather than half-migrate.
+(old dir exists, new does not); every step is idempotent and skipped when
+already done, so an interrupted migration is completed by re-running the
+installer; every action is logged with before/after; if a step's
+precondition fails (for example the new path already exists), stop before
+acting and report — the migration never merges or overwrites. Abort
+policy: stop, report exactly which steps completed, and print the two
+options — re-run to finish (normal case; state is safe at every step
+boundary) or roll back with the archived copies and reverse moves.
 
 Rollback: archived `.env` + `rclone.conf` copies, reverse `mv`s, and git
 history for the repo side. The old timer is only finally removed once the new

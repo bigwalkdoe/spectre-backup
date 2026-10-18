@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# fedora-back-up - Shared library
+# spectre-backup - Shared library
 # Distro detection, package management, logging, config loading.
 # ============================================================
 
@@ -88,24 +88,24 @@ install_packages() {
 check_cmd() { command -v "$1" &>/dev/null; }
 
 # --- Resolve config directories ---
-# CONFIG_DIR:     ~/.config/fedora-back-up  (or XDG_CONFIG_HOME)
-# STATE_DIR:      ~/.local/state/fedora-back-up (or XDG_STATE_HOME)
+# CONFIG_DIR:     ~/.config/spectre-backup  (or XDG_CONFIG_HOME)
+# STATE_DIR:      ~/.local/state/spectre-backup (or XDG_STATE_HOME)
 # BIN_DIR:        ~/.local/bin (or XDG_DATA_HOME/bin)
-# SYSTEM_DIR:     /etc/fedora-back-up  (system-wide config for servers)
+# SYSTEM_DIR:     /etc/spectre-backup  (system-wide config for servers)
 resolve_dirs() {
-    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fedora-back-up"
-    STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fedora-back-up"
+    CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/spectre-backup"
+    STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
     BIN_DIR="${XDG_DATA_HOME:-$HOME/.local}/bin"
-    SYSTEM_CONFIG_DIR="/etc/fedora-back-up"
+    SYSTEM_CONFIG_DIR="/etc/spectre-backup"
     mkdir -p "$CONFIG_DIR" "$STATE_DIR" "$BIN_DIR"
 }
 
 # --- Detect machine role: workstation or server ---
-# Role precedence: FEDORA_BACK_UP_ROLE env var -> installer flag -> auto-detect
+# Role precedence: SPECTRE_BACKUP_ROLE env var -> installer flag -> auto-detect
 # Auto-detect: if a graphical session is present, treat as workstation.
 detect_role() {
-    if [ -n "${FEDORA_BACK_UP_ROLE:-}" ]; then
-        echo "$FEDORA_BACK_UP_ROLE"
+    if [ -n "${SPECTRE_BACKUP_ROLE:-}" ]; then
+        echo "$SPECTRE_BACKUP_ROLE"
         return 0
     fi
     # Auto-detect: presence of a desktop session suggests workstation
@@ -122,8 +122,8 @@ load_env() {
     local env_file=""
     if [ -f "$CONFIG_DIR/.env" ]; then
         env_file="$CONFIG_DIR/.env"
-    elif [ -f "/etc/fedora-back-up/.env" ]; then
-        env_file="/etc/fedora-back-up/.env"
+    elif [ -f "/etc/spectre-backup/.env" ]; then
+        env_file="/etc/spectre-backup/.env"
     elif [ -f "${PROJECT_DIR:-}/config/.env.example" ]; then
         env_file="${PROJECT_DIR}/config/.env.example"
     fi
@@ -136,7 +136,7 @@ load_env() {
 
 # --- Determine the restic repository from env, with a sensible default ---
 repo_from_env() {
-    echo "${RESTIC_REPOSITORY:-rclone:fedora-back-up:}"
+    echo "${RESTIC_REPOSITORY:-rclone:spectre-backup:}"
 }
 
 # --- Build a target list from an include file ---
