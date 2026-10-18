@@ -1,6 +1,6 @@
 [Unit]
 Description=fedora-back-up Timer - daily workstation/server backup
-Documentation=https://github.com/bigwalkdoe/fedora-back-up
+Documentation=https://github.com/bigwalkdoe/spectre-backup
 
 [Timer]
 # Daily at 4 AM with random delay to avoid thundering herd

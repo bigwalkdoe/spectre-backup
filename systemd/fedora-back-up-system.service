@@ -1,6 +1,6 @@
 [Unit]
 Description=fedora-back-up - Encrypted versioned server backup
-Documentation=https://github.com/bigwalkdoe/fedora-back-up
+Documentation=https://github.com/bigwalkdoe/spectre-backup
 After=network-online.target
 Wants=network-online.target
 

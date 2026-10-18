@@ -13,7 +13,9 @@ Encrypted, automated, versioned backup platform for Linux workstations and serve
 | Ubuntu | Workstation | `./scripts/fedora-back-up-install.sh --role=workstation` |
 | Ubuntu | Server | `./scripts/fedora-back-up-install.sh --role=server` |
 
-Role is auto-detected if not specified: a graphical session means workstation, otherwise server.
+Role is auto-detected if not specified: a graphical session means workstation, otherwise server. Override with `--role=workstation|server` or the `FEDORA_BACK_UP_ROLE` environment variable.
+
+Already running the original single-machine install? See [`docs/migration-guide.md`](docs/migration-guide.md).
 
 ## Architecture
 
@@ -44,8 +46,9 @@ Dual-repository design: the local repository holds everything; the offsite repos
 ## Quick Install
 
 ```bash
-# Clone or copy the fedora-back-up directory
-cd fedora-back-up
+# Clone the repository
+git clone https://github.com/bigwalkdoe/spectre-backup.git
+cd spectre-backup
 
 # Workstation (default if a desktop session is detected)
 ./scripts/fedora-back-up-install.sh --role=workstation
@@ -96,11 +99,22 @@ fedora-back-up.sh --health          # Human-readable
 fedora-back-up.sh --health --json   # Machine-readable JSON
 ```
 
+Exit codes make it suitable for monitoring (cron, systemd OnFailure, uptime checks): `0` = ok, `1` = degraded, `2` = failed.
+
+| Signal | ok | degraded | failed |
+|--------|-----|----------|--------|
+| Local snapshot age | ≤ 2h | > 2h | > 24h |
+| Offsite snapshot age | ≤ 36h | > 36h | > 72h |
+| Local disk free | ≥ 25 GiB | < 25 GiB | < 15 GiB |
+| Offsite quota used | ≤ 85% | > 85% | > 95% |
+
 ### View snapshots
 
 ```bash
 fedora-back-up-restore.sh --list
 ```
+
+Snapshots are tagged `fedora-back-up` plus the role (`workstation` or `server`), for example `restic snapshots --tag server`.
 
 ### Restore from latest snapshot
 
@@ -112,6 +126,12 @@ fedora-back-up-restore.sh
 
 ```bash
 fedora-back-up-restore.sh --snapshot=<snapshot-id>
+```
+
+### Rehearse a restore
+
+```bash
+fedora-back-up-restore.sh --snapshot=<snapshot-id> --dry-run
 ```
 
 ### Verify repository integrity
@@ -164,6 +184,25 @@ journalctl -u fedora-back-up.service -n 50
 journalctl -u fedora-back-up.service -f
 ```
 
+## Troubleshooting
+
+**`repository is already locked`**
+A run was interrupted (machine slept or was shut down mid-backup) and left a lock behind. Every backup and prune now heals stale locks before it starts — `restic unlock`, which removes only locks whose owning process is gone, so a backup that is genuinely running is never disturbed. If you want to clear them by hand:
+
+```bash
+restic -r <repository> unlock
+```
+
+**Google Drive `rateLimitExceeded` / HTTP 403**
+A transient Google-side quota. The offsite leg retries with backoff and normally completes; repeated occurrences only slow the backup down. Check the remote itself with:
+
+```bash
+rclone lsd fedora-back-up:
+```
+
+**"Backup Degraded" notification**
+The offsite remote was unreachable, so only the local repository was updated — the local backup is complete and intact. Confirm with `fedora-back-up.sh --health` once the remote is back, then run `fedora-back-up.sh` to catch the offsite leg up.
+
 ## Disaster recovery workflow
 
 When replacing a lost machine:
@@ -197,6 +236,7 @@ Total:                                    < 2 hours
 | `fedora-back-up-verify.sh` | Integrity verification (quick or full) |
 | `fedora-back-up-prune.sh` | Enforce retention policy with `restic forget` + `prune` |
 | `git-mirror.sh` | Mirror git history (without working trees) for backup |
+| `backup-common.sh` | Shared library: distro/role detection, package install, config loading |
 
 ## Logs
 
@@ -261,4 +301,15 @@ All operations are safe to run repeatedly:
     fedora-back-up-verify.sh
     fedora-back-up-prune.sh
     git-mirror.sh
+    backup-common.sh
 ```
+
+The installer itself is not copied to `~/.local/bin/` — run it from the repo checkout.
+
+## Testing
+
+```bash
+./tests/run-tests.sh
+```
+
+63 checks covering distro and role detection, config coverage for every role/distro combination, restic output parsing, systemd units, and shellcheck compliance.
