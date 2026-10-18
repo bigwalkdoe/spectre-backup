@@ -37,6 +37,16 @@ The installer will:
 5. Install the appropriate systemd unit (user for workstation, system for server)
 6. Start the daily timer
 
+> **Clean up a stale installer copy if one exists.** The installer now runs from
+> the repo checkout and does not install itself. Some old deployments left a
+> copy at `~/.local/bin/fedora-back-up-install.sh`; it cannot work from there
+> (it needs the repo's `lib/`, `config/`, and `systemd/` trees) and would
+> reinstall the old single-machine layout if it ever ran. Remove it:
+>
+> ```bash
+> rm -f ~/.local/bin/fedora-back-up-install.sh
+> ```
+
 ## Step 2: Review your config
 
 Your existing config files were preserved, but you should review them against the
@@ -93,9 +103,10 @@ journalctl -u fedora-back-up.service    # instead of journalctl --user
 
 ## Rollback
 
-The installer never deletes your old scripts or config. If something goes wrong:
+The installer never deletes your config, password, or repository. If something
+goes wrong:
 
-1. Your old scripts remain in `~/.local/bin/` (they were replaced, not deleted — but the repo's `scripts/` directory still has the originals if you need to copy them back)
+1. Scripts in `~/.local/bin/` were replaced by the installer. The previous versions are in the repo's git history (`git log -- scripts/`) if you need to restore them
 2. Your old config in `~/.config/fedora-back-up/` was not overwritten
 3. Your restic repository and password are untouched
 4. The systemd timer can be disabled: `systemctl --user disable fedora-back-up.timer`
@@ -105,6 +116,7 @@ The installer never deletes your old scripts or config. If something goes wrong:
 | Old behavior | New behavior | Action needed |
 |--------------|--------------|---------------|
 | `fedora-back-up.sh` in `~/.local/bin/` | Same path, new content | None — auto-updated by installer |
+| `fedora-back-up-install.sh` in `~/.local/bin/` | Installer runs from the repo checkout | Remove the stale copy |
 | `~/dev` in include.conf | `~/.git-mirror` in include.conf | Update include.conf |
 | User systemd only | User + system systemd | Servers need `--role=server` |
 | Hardcoded distro (Fedora/dnf) | Auto-detect (Fedora/Ubuntu) | None |
