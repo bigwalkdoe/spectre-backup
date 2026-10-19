@@ -11,6 +11,9 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Source shared library
 # shellcheck source=../lib/spectre-backup-common.sh
 . "$PROJECT_DIR/lib/spectre-backup-common.sh"
+# Source migration library
+# shellcheck source=../lib/migrate-legacy.sh
+. "$PROJECT_DIR/lib/migrate-legacy.sh"
 
 # --- Parse arguments ---
 ROLE=""
@@ -53,6 +56,14 @@ if [ -z "$ROLE" ]; then
     ROLE=$(detect_role)
 fi
 info "Role: $ROLE"
+
+# Legacy rename migration (before resolve_dirs so detection sees real state)
+if [ "$INSTALL_BIN_ONLY" = true ]; then
+    info "Skipping legacy migration (--bin-only)"
+else
+    header "Step 0: Migrating legacy install (if any)"
+    migrate_legacy_install
+fi
 
 # --- Resolve directories ---
 resolve_dirs
