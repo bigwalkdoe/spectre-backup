@@ -1,4 +1,4 @@
-# fedora-back-up
+# spectre-backup
 
 Encrypted, automated, versioned backup platform for Linux workstations and servers.
 
@@ -8,14 +8,17 @@ Encrypted, automated, versioned backup platform for Linux workstations and serve
 
 | Distro | Role | Install command |
 |--------|------|-----------------|
-| Fedora | Workstation | `./scripts/fedora-back-up-install.sh --role=workstation` |
-| Fedora | Server | `./scripts/fedora-back-up-install.sh --role=server` |
-| Ubuntu | Workstation | `./scripts/fedora-back-up-install.sh --role=workstation` |
-| Ubuntu | Server | `./scripts/fedora-back-up-install.sh --role=server` |
+| Fedora | Workstation | `./scripts/spectre-backup-install.sh --role=workstation` |
+| Fedora | Server | `./scripts/spectre-backup-install.sh --role=server` |
+| Ubuntu | Workstation | `./scripts/spectre-backup-install.sh --role=workstation` |
+| Ubuntu | Server | `./scripts/spectre-backup-install.sh --role=server` |
 
-Role is auto-detected if not specified: a graphical session means workstation, otherwise server. Override with `--role=workstation|server` or the `FEDORA_BACK_UP_ROLE` environment variable.
+Role is auto-detected if not specified: a graphical session means workstation, otherwise server. Override with `--role=workstation|server` or the `SPECTRE_BACKUP_ROLE` environment variable.
 
 Already running the original single-machine install? See [`docs/migration-guide.md`](docs/migration-guide.md).
+
+Upgrading from the old `fedora-back-up` name? The installer migrates a legacy
+install automatically — see [Renaming from fedora-back-up to spectre-backup](docs/migration-guide.md#renaming-from-fedora-back-up-to-spectre-backup).
 
 ## Architecture
 
@@ -51,10 +54,10 @@ git clone https://github.com/bigwalkdoe/spectre-backup.git
 cd spectre-backup
 
 # Workstation (default if a desktop session is detected)
-./scripts/fedora-back-up-install.sh --role=workstation
+./scripts/spectre-backup-install.sh --role=workstation
 
 # Server (system systemd service, runs as root)
-./scripts/fedora-back-up-install.sh --role=server
+./scripts/spectre-backup-install.sh --role=server
 ```
 
 The installer will:
@@ -70,11 +73,11 @@ The installer will:
 
 ## Configuration layout
 
-Workstations install config to `~/.config/fedora-back-up/`. Servers install to `/etc/fedora-back-up/`.
+Workstations install config to `~/.config/spectre-backup/`. Servers install to `/etc/spectre-backup/`.
 
 ```
-~/.config/fedora-back-up/          (workstation)
-/etc/fedora-back-up/               (server)
+~/.config/spectre-backup/          (workstation)
+/etc/spectre-backup/               (server)
     .env             # Environment configuration
     password         # Restic repository password (chmod 600)
     include.conf     # Paths to include in backups
@@ -89,14 +92,14 @@ Config is selected by role and distro: `config/<role>/<distro>/`. Falls back to 
 ### Manual backup
 
 ```bash
-fedora-back-up.sh
+spectre-backup.sh
 ```
 
 ### Health check
 
 ```bash
-fedora-back-up.sh --health          # Human-readable
-fedora-back-up.sh --health --json   # Machine-readable JSON
+spectre-backup.sh --health          # Human-readable
+spectre-backup.sh --health --json   # Machine-readable JSON
 ```
 
 Exit codes make it suitable for monitoring (cron, systemd OnFailure, uptime checks): `0` = ok, `1` = degraded, `2` = failed.
@@ -111,47 +114,47 @@ Exit codes make it suitable for monitoring (cron, systemd OnFailure, uptime chec
 ### View snapshots
 
 ```bash
-fedora-back-up-restore.sh --list
+spectre-backup-restore.sh --list
 ```
 
-Snapshots are tagged `fedora-back-up` plus the role (`workstation` or `server`), for example `restic snapshots --tag server`.
+Snapshots are tagged `spectre-backup` plus the role (`workstation` or `server`), for example `restic snapshots --tag server`.
 
 ### Restore from latest snapshot
 
 ```bash
-fedora-back-up-restore.sh
+spectre-backup-restore.sh
 ```
 
 ### Restore from specific snapshot
 
 ```bash
-fedora-back-up-restore.sh --snapshot=<snapshot-id>
+spectre-backup-restore.sh --snapshot=<snapshot-id>
 ```
 
 ### Rehearse a restore
 
 ```bash
-fedora-back-up-restore.sh --snapshot=<snapshot-id> --dry-run
+spectre-backup-restore.sh --snapshot=<snapshot-id> --dry-run
 ```
 
 ### Verify repository integrity
 
 ```bash
 # Quick check (structure only)
-fedora-back-up-verify.sh
+spectre-backup-verify.sh
 
 # Full check (reads all data - slower)
-fedora-back-up-verify.sh --full
+spectre-backup-verify.sh --full
 ```
 
 ### Prune old snapshots
 
 ```bash
 # Preview what would be removed
-fedora-back-up-prune.sh --dry-run
+spectre-backup-prune.sh --dry-run
 
 # Apply retention policy
-fedora-back-up-prune.sh
+spectre-backup-prune.sh
 ```
 
 ## Retention policy
@@ -172,16 +175,16 @@ A systemd timer runs daily at 04:00 (with up to 1h random delay).
 
 Workstation (user timer):
 ```bash
-systemctl --user status fedora-back-up.timer
-journalctl --user -u fedora-back-up.service -n 50
-journalctl --user -u fedora-back-up.service -f
+systemctl --user status spectre-backup.timer
+journalctl --user -u spectre-backup.service -n 50
+journalctl --user -u spectre-backup.service -f
 ```
 
 Server (system timer):
 ```bash
-systemctl status fedora-back-up.timer
-journalctl -u fedora-back-up.service -n 50
-journalctl -u fedora-back-up.service -f
+systemctl status spectre-backup.timer
+journalctl -u spectre-backup.service -n 50
+journalctl -u spectre-backup.service -f
 ```
 
 ## Troubleshooting
@@ -197,11 +200,11 @@ restic -r <repository> unlock
 A transient Google-side quota. The offsite leg retries with backoff and normally completes; repeated occurrences only slow the backup down. Check the remote itself with:
 
 ```bash
-rclone lsd fedora-back-up:
+rclone lsd spectre-backup:
 ```
 
 **"Backup Degraded" notification**
-The offsite remote was unreachable, so only the local repository was updated — the local backup is complete and intact. Confirm with `fedora-back-up.sh --health` once the remote is back, then run `fedora-back-up.sh` to catch the offsite leg up.
+The offsite remote was unreachable, so only the local repository was updated — the local backup is complete and intact. Confirm with `spectre-backup.sh --health` once the remote is back, then run `spectre-backup.sh` to catch the offsite leg up.
 
 ## Disaster recovery workflow
 
@@ -215,9 +218,9 @@ When replacing a lost machine:
 3. Authenticate offsite storage                ~~~~5 min
    rclone config
 4. Run the installer                           ~~~~5 min
-   ./scripts/fedora-back-up-install.sh
+   ./scripts/spectre-backup-install.sh
 5. Restore backup                              ~30 min
-   fedora-back-up-restore.sh
+   spectre-backup-restore.sh
 6. Verify SSH/GPG keys                         ~~~~5 min
 7. Install remaining packages                  ~15 min
 8. Restore PostgreSQL dumps                    ~~~~5 min
@@ -230,17 +233,17 @@ Total:                                    < 2 hours
 
 | Script | Purpose |
 |--------|---------|
-| `fedora-back-up-install.sh` | One-time setup: packages, config, rclone auth, repo init, systemd |
-| `fedora-back-up.sh` | Main backup engine: files + DB dumps + containers → Restic |
-| `fedora-back-up-restore.sh` | Disaster recovery: restore everything from a snapshot |
-| `fedora-back-up-verify.sh` | Integrity verification (quick or full) |
-| `fedora-back-up-prune.sh` | Enforce retention policy with `restic forget` + `prune` |
+| `spectre-backup-install.sh` | One-time setup: packages, config, rclone auth, repo init, systemd |
+| `spectre-backup.sh` | Main backup engine: files + DB dumps + containers → Restic |
+| `spectre-backup-restore.sh` | Disaster recovery: restore everything from a snapshot |
+| `spectre-backup-verify.sh` | Integrity verification (quick or full) |
+| `spectre-backup-prune.sh` | Enforce retention policy with `restic forget` + `prune` |
 | `git-mirror.sh` | Mirror git history (without working trees) for backup |
-| `backup-common.sh` | Shared library: distro/role detection, package install, config loading |
+| `spectre-backup-common.sh` | Shared library: distro/role detection, package install, config loading |
 
 ## Logs
 
-All logs are stored in `~/.local/state/fedora-back-up/` (workstations) or `/root/.local/state/fedora-back-up/` (servers):
+All logs are stored in `~/.local/state/spectre-backup/` (workstations) or `/root/.local/state/spectre-backup/` (servers):
 
 | File | Content |
 |------|---------|
@@ -261,16 +264,16 @@ All logs are stored in `~/.local/state/fedora-back-up/` (workstations) or `/root
 
 ## Custom storage backend
 
-By default, offsite backups go to Google Drive via the `fedora-back-up:` rclone remote. To use a different backend:
+By default, offsite backups go to Google Drive via the `spectre-backup:` rclone remote. To use a different backend:
 
 1. Configure rclone: `rclone config`
 2. Change `RESTIC_REPOSITORY` in your `.env`:
 
 ```bash
-# Examples:
-RESTIC_REPOSITORY="rclone:s3:fedora-back-up/workstation"
+# Examples (the part after the colon is your bucket/folder name):
+RESTIC_REPOSITORY="rclone:s3:my-backup-bucket/workstation"
 RESTIC_REPOSITORY="rclone:dropbox:Backups/workstation"
-RESTIC_REPOSITORY="rclone:wasabi:fedora-back-ups/workstation"
+RESTIC_REPOSITORY="rclone:wasabi:my-backup-bucket/workstation"
 RESTIC_REPOSITORY="s3:https://.../bucket/workstation"
 ```
 
@@ -278,30 +281,30 @@ RESTIC_REPOSITORY="s3:https://.../bucket/workstation"
 
 All operations are safe to run repeatedly:
 
-- `fedora-back-up-install.sh` - Won't overwrite existing config, password, or initialized repo
-- `fedora-back-up.sh` - Restic deduplicates; identical files stored only once
-- `fedora-back-up-restore.sh` - Overwrites existing files with backed-up versions
-- `fedora-back-up-verify.sh` - Read-only; no side effects
-- `fedora-back-up-prune.sh` - Only removes snapshots matching unused retention criteria
+- `spectre-backup-install.sh` - Won't overwrite existing config, password, or initialized repo
+- `spectre-backup.sh` - Restic deduplicates; identical files stored only once
+- `spectre-backup-restore.sh` - Overwrites existing files with backed-up versions
+- `spectre-backup-verify.sh` - Read-only; no side effects
+- `spectre-backup-prune.sh` - Only removes snapshots matching unused retention criteria
 
 ## File layout (installed)
 
 ```
-~/.config/fedora-back-up/          (workstation config)
-/etc/fedora-back-up/               (server config)
-~/.local/state/fedora-back-up/     (logs, dumps, state)
+~/.config/spectre-backup/          (workstation config)
+/etc/spectre-backup/               (server config)
+~/.local/state/spectre-backup/     (logs, dumps, state)
     dumps/
         YYYYMMDD-HHMMSS/
             postgres.sql.gz
             containers/
 ~/.local/bin/                      (workstation scripts)
 /root/.local/bin/                  (server scripts)
-    fedora-back-up.sh
-    fedora-back-up-restore.sh
-    fedora-back-up-verify.sh
-    fedora-back-up-prune.sh
+    spectre-backup.sh
+    spectre-backup-restore.sh
+    spectre-backup-verify.sh
+    spectre-backup-prune.sh
     git-mirror.sh
-    backup-common.sh
+    spectre-backup-common.sh
 ```
 
 The installer itself is not copied to `~/.local/bin/` — run it from the repo checkout.
@@ -312,4 +315,9 @@ The installer itself is not copied to `~/.local/bin/` — run it from the repo c
 ./tests/run-tests.sh
 ```
 
-63 checks covering distro and role detection, config coverage for every role/distro combination, restic output parsing, systemd units, and shellcheck compliance.
+The suite prints its own totals. It covers distro and role detection, config
+coverage for every role/distro combination, restic output parsing, snapshot
+tags, systemd units, naming guards (the old product name must not reappear),
+the legacy-install migration against synthetic fixtures (including ambiguous
+state, idempotent re-runs, and a broken `systemctl`), and shellcheck
+compliance.

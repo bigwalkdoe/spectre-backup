@@ -1,4 +1,97 @@
-# Migration guide: fedora-back-up
+# Migration guide: spectre-backup
+
+Two migrations live here:
+
+1. **[Renaming from fedora-back-up to spectre-backup](#renaming-from-fedora-back-up-to-spectre-backup)** — the product name changed (2026-10-18)
+2. **The layout migration below** — the original single-user Fedora workstation layout moving to the multi-distro, multi-role platform
+
+## Renaming from fedora-back-up to spectre-backup
+
+The tool was named after the single machine it started on. It now runs on
+Fedora and Ubuntu, as workstations and servers, so the name changed to
+`spectre-backup`. Nothing about the backup engine changed — same restic
+engine, same scope, same retention.
+
+### What the installer migrates automatically
+
+Run the installer on the machine; before anything else it migrates a legacy
+install in place:
+
+```bash
+./scripts/spectre-backup-install.sh --role=workstation
+```
+
+It will, logging each step:
+
+- rename the rclone remote section `[fedora-back-up]` → `[spectre-backup]`
+  in `~/.config/rclone/rclone.conf` (no remote data moves)
+- move the local repository (e.g. `/backups/fedora-back-up` →
+  `/backups/spectre-backup`) — same filesystem, so this is instant; the
+  repository moves *before* `.env` is rewritten, so the path never points at
+  a missing repository
+- move `~/.config/fedora-back-up/` → `~/.config/spectre-backup/` and rewrite
+  the old name inside every file there (`.env` paths, comments)
+- move `~/.local/state/fedora-back-up/` → `~/.local/state/spectre-backup/`
+  (logs and DB dumps travel with it)
+- remove the old installed scripts (`~/.local/bin/fedora-back-up*.sh`,
+  `backup-common.sh`, the `fedora-back-up` symlink)
+- disable the old user timer, remove the old user unit files, reload systemd
+
+Before touching anything it archives your legacy `.env` and `rclone.conf` to
+`~/.local/state/spectre-backup/migration-backup-<timestamp>/` for rollback.
+
+Safety rules the migration follows:
+
+- **It never merges repositories.** If both the old and new paths exist, it
+  stops and reports instead of guessing.
+- **It is idempotent.** An interrupted migration is finished by re-running
+  the installer; completed steps are skipped.
+- **Old snapshots keep their old tags.** Tags are immutable history; new
+  snapshots are tagged `spectre-backup` plus the role.
+
+### What stays manual (needs root)
+
+Legacy *system-level* units from old deployments are never touched by the
+installer — they need `sudo`, so it only prints the commands:
+
+```bash
+sudo systemctl disable --now fedora-back-up.timer
+sudo rm /etc/systemd/system/fedora-back-up.service /etc/systemd/system/fedora-back-up.timer
+sudo systemctl daemon-reload
+```
+
+Server-shaped old installs (`/etc/fedora-back-up`, system units) are not
+automated either:
+
+```bash
+sudo mv /etc/fedora-back-up /etc/spectre-backup
+# then install the new units from the repo (sudo cp systemd/spectre-backup*.{service,timer} /etc/systemd/system/)
+sudo systemctl daemon-reload
+```
+
+> A leftover legacy system timer is harmless but noisy: it fires daily and
+> fails instantly because it execs a script that no longer exists. Remove it
+> with the three commands above.
+
+The Google Drive folder's display name is cosmetic and unrelated — the rclone
+remote is pinned by its `root_folder_id`, and no tooling reads the folder
+name. Rename it in the Drive web UI if you like.
+
+### Verify
+
+```bash
+rclone lsd spectre-backup:
+spectre-backup.sh --health                       # expect OK
+restic -r /backups/spectre-backup snapshots      # same snapshots as before
+spectre-backup-restore.sh --list
+systemctl --user list-timers spectre-backup.timer
+```
+
+Roll back with the archived copies in
+`~/.local/state/spectre-backup/migration-backup-<timestamp>/` plus the reverse
+directory moves if anything looks wrong.
+
+## Layout migration: single-user workstation → multi-distro, multi-role
 
 Moving from the original single-user Fedora workstation layout to the expanded
 multi-distro, multi-role platform.
@@ -9,11 +102,11 @@ multi-distro, multi-role platform.
 |------|--------|-------|
 | Distros | Fedora only (`dnf`) | Fedora (`dnf`) and Ubuntu (`apt`) |
 | Roles | Workstation only | Workstation + server |
-| Config location | `~/.config/fedora-back-up/` | `~/.config/fedora-back-up/` (workstation) or `/etc/fedora-back-up/` (server) |
+| Config location | `~/.config/fedora-back-up/` | `~/.config/spectre-backup/` (workstation) or `/etc/spectre-backup/` (server) |
 | Config scope | Hardcoded `/home/deon/...` paths | Role- and distro-specific scopes in `config/<role>/<distro>/` |
 | Paths | `/home/deon/dev` (working trees) | `~/.git-mirror` (bare mirrors, history only) |
 | systemd | User service only | User service (workstation) + system service (server) |
-| Password | `~/.config/fedora-back-up/password` | Same (workstation) or `/etc/fedora-back-up/password` (server) |
+| Password | `~/.config/spectre-backup/password` | Same (workstation) or `/etc/spectre-backup/password` (server) |
 
 ## Step 1: Re-run the installer
 
@@ -22,17 +115,17 @@ the initialized repository. Just run it with your role:
 
 ```bash
 # Workstation (this machine)
-./scripts/fedora-back-up-install.sh --role=workstation
+./scripts/spectre-backup-install.sh --role=workstation
 
 # Server
-./scripts/fedora-back-up-install.sh --role=server
+./scripts/spectre-backup-install.sh --role=server
 ```
 
 The installer will:
 
 1. Detect your distro and pick `dnf` or `apt`
 2. Install/update scripts and the shared library to `~/.local/bin/`
-3. Copy role- and distro-specific config to `~/.config/fedora-back-up/` (or `/etc/fedora-back-up/` for servers)
+3. Copy role- and distro-specific config to `~/.config/spectre-backup/` (or `/etc/spectre-backup/` for servers)
 4. Keep your existing `.env`, `include.conf`, `exclude.conf`, and `password` (not overwritten)
 5. Install the appropriate systemd unit (user for workstation, system for server)
 6. Start the daily timer
@@ -54,9 +147,9 @@ new role-specific defaults:
 
 ```bash
 # Workstation
-diff config/workstation/fedora/include.conf  ~/.config/fedora-back-up/include.conf
-diff config/workstation/fedora/exclude.conf  ~/.config/fedora-back-up/exclude.conf
-diff config/workstation/fedora/include-remote.conf  ~/.config/fedora-back-up/include-remote.conf
+diff config/workstation/fedora/include.conf  ~/.config/spectre-backup/include.conf
+diff config/workstation/fedora/exclude.conf  ~/.config/spectre-backup/exclude.conf
+diff config/workstation/fedora/include-remote.conf  ~/.config/spectre-backup/include-remote.conf
 ```
 
 Key changes to consider:
@@ -72,16 +165,16 @@ If you previously had `/home/deon/dev` in your includes, you can remove it — `
 
 ```bash
 # Run a backup
-~/.local/bin/fedora-back-up.sh
+~/.local/bin/spectre-backup.sh
 
 # Check health
-~/.local/bin/fedora-back-up.sh --health
+~/.local/bin/spectre-backup.sh --health
 
 # List snapshots
-~/.local/bin/fedora-back-up-restore.sh --list
+~/.local/bin/spectre-backup-restore.sh --list
 
 # Verify repository
-~/.local/bin/fedora-back-up-verify.sh
+~/.local/bin/spectre-backup-verify.sh
 ```
 
 ## Step 4: Update any cron jobs or external references
@@ -90,15 +183,16 @@ If you had external cron entries or scripts calling the old backup paths,
 update them to the new locations:
 
 ```bash
-# Old (user scripts directory)
-~/.local/bin/fedora-back-up.sh   # unchanged location
+# Scripts: same location, new names
+~/.local/bin/spectre-backup.sh
+~/.local/bin/spectre-backup-restore.sh
 
-# Old config
-~/.config/fedora-back-up/.env    # unchanged for workstations
+# Config: same location for workstations
+~/.config/spectre-backup/.env
 
-# New: system service (servers only)
-systemctl status fedora-back-up.timer   # instead of systemctl --user
-journalctl -u fedora-back-up.service    # instead of journalctl --user
+# Servers: system service instead of user service
+systemctl status spectre-backup.timer   # instead of systemctl --user
+journalctl -u spectre-backup.service    # instead of journalctl --user
 ```
 
 ## Rollback
@@ -107,15 +201,15 @@ The installer never deletes your config, password, or repository. If something
 goes wrong:
 
 1. Scripts in `~/.local/bin/` were replaced by the installer. The previous versions are in the repo's git history (`git log -- scripts/`) if you need to restore them
-2. Your old config in `~/.config/fedora-back-up/` was not overwritten
+2. Your old config in `~/.config/spectre-backup/` was not overwritten
 3. Your restic repository and password are untouched
-4. The systemd timer can be disabled: `systemctl --user disable fedora-back-up.timer`
+4. The systemd timer can be disabled: `systemctl --user disable spectre-backup.timer`
 
 ## Compatibility matrix
 
 | Old behavior | New behavior | Action needed |
 |--------------|--------------|---------------|
-| `fedora-back-up.sh` in `~/.local/bin/` | Same path, new content | None — auto-updated by installer |
+| `fedora-back-up.sh` in `~/.local/bin/` | `spectre-backup.sh`, same path | None — installer migrates it |
 | `fedora-back-up-install.sh` in `~/.local/bin/` | Installer runs from the repo checkout | Remove the stale copy |
 | `~/dev` in include.conf | `~/.git-mirror` in include.conf | Update include.conf |
 | User systemd only | User + system systemd | Servers need `--role=server` |
