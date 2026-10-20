@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install test dependencies
         run: |
           sudo apt-get update -qq
@@ -37,7 +37,7 @@ jobs:
       # checkout runs inside the container and needs git before it can clone
       - name: Prepare container
         run: dnf install -y git ca-certificates
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install test dependencies
         run: dnf install -y jq restic rclone ShellCheck findutils
       - name: Run test suite
