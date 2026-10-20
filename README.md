@@ -323,3 +323,9 @@ tags, systemd units, naming guards (the old product name must not reappear),
 the legacy-install migration against synthetic fixtures (including ambiguous
 state, idempotent re-runs, and a broken `systemctl`), and shellcheck
 compliance.
+
+CI runs the same suite on Ubuntu and Fedora for every push and pull request.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
