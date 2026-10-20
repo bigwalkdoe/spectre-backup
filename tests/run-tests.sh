@@ -686,6 +686,107 @@ assert_eq "migration: installer wiring present" "yes" "$([ -n "$call_line" ] && 
 assert_eq "migration: migration call precedes resolve_dirs" "yes" "$([ -n "$call_line" ] && [ -n "$resolve_line" ] && [ "$call_line" -lt "$resolve_line" ] && echo yes || echo no)"
 
 # -------------------------------------------------------------
+echo ""
+echo "--- Health check SLOs ---"
+
+make_health_sandbox() {
+    SANDBOX=$(mktemp -d "/tmp/spectre-health.XXXXXX")
+    export SANDBOX
+    mkdir -p "$SANDBOX/config/spectre-backup" "$SANDBOX/state" "$SANDBOX/home" \
+             "$SANDBOX/repo" "$SANDBOX/stubbin"
+    cat > "$SANDBOX/config/spectre-backup/.env" <<EOF
+RESTIC_REPOSITORY="rclone:fake-remote:"
+RESTIC_REPOSITORY_LOCAL="$SANDBOX/repo"
+NOTIFY_ENABLED="false"
+EOF
+    printf 'test-password\n' > "$SANDBOX/config/spectre-backup/password"
+    # restic stub: a snapshot aged LOCAL_AGE_H for the local repo, OFF_AGE_H
+    # for the offsite repo.
+    cat > "$SANDBOX/stubbin/restic" <<EOF
+#!/bin/bash
+repo="\$2"
+if [ "\$repo" = "$SANDBOX/repo" ]; then age="\${LOCAL_AGE_H:-2}"; else age="\${OFF_AGE_H:-2}"; fi
+printf '[{"time":"%s"}]\n' "\$(date -u -d "-\$age hours" +%Y-%m-%dT%H:%M:%SZ)"
+EOF
+    # df stub: /tmp is small, and the SLO must not depend on the host's disk.
+    cat > "$SANDBOX/stubbin/df" <<'EOF'
+#!/bin/bash
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+echo "fake 104857600 1048576 103809024 1% /"
+EOF
+    cat > "$SANDBOX/stubbin/rclone" <<'EOF'
+#!/bin/bash
+[ "$1" = "about" ] && echo "Used:  10%"
+exit 0
+EOF
+    chmod +x "$SANDBOX/stubbin/restic" "$SANDBOX/stubbin/df" "$SANDBOX/stubbin/rclone"
+}
+
+teardown_health_sandbox() {
+    rm -rf "$SANDBOX"
+    unset SANDBOX
+}
+
+run_health() {
+    local local_age="$1" off_age="$2"
+    set +e
+    LOCAL_AGE_H="$local_age" OFF_AGE_H="$off_age" \
+        SPECTRE_BACKUP_ROLE=workstation \
+        XDG_CONFIG_HOME="$SANDBOX/config" \
+        XDG_STATE_HOME="$SANDBOX/state" \
+        HOME="$SANDBOX/home" \
+        PATH="$SANDBOX/stubbin:$PATH" \
+        bash "$PROJECT_DIR/scripts/spectre-backup.sh" --health --json \
+        > "$SANDBOX/health.json" 2> "$SANDBOX/health.err"
+    health_rc=$?
+    set -e
+    # The script routes stdout through tee (process substitution), which can
+    # land a moment after it exits.
+    local i
+    for i in $(seq 1 20); do
+        jq -e . "$SANDBOX/health.json" >/dev/null 2>&1 && break
+        sleep 0.1
+    done
+    health_local=$(jq -r '.local.status' "$SANDBOX/health.json" 2>/dev/null || echo "parse-error")
+    health_overall=$(jq -r '.status' "$SANDBOX/health.json" 2>/dev/null || echo "parse-error")
+}
+
+# A few hours old: ok (regression guard for the normal case)
+make_health_sandbox
+run_health 1 1
+assert_eq "health: 1h local is ok" "ok" "$health_local"
+assert_eq "health: 1h exits 0" 0 "$health_rc"
+teardown_health_sandbox
+
+# A daily timer's normal age is still ok (26h window, age_h floors to 24)
+make_health_sandbox
+run_health 25 25
+assert_eq "health: 25h local is ok (daily cadence)" "ok" "$health_local"
+assert_eq "health: 25h exits 0" 0 "$health_rc"
+teardown_health_sandbox
+
+# One missed run: degraded
+make_health_sandbox
+run_health 28 28
+assert_eq "health: 28h local is degraded" "degraded" "$health_local"
+assert_eq "health: 28h exits 1" 1 "$health_rc"
+teardown_health_sandbox
+
+# Two days without a run is still degraded, not failed
+make_health_sandbox
+run_health 47 47
+assert_eq "health: 47h local is degraded" "degraded" "$health_local"
+assert_eq "health: 47h exits 1" 1 "$health_rc"
+teardown_health_sandbox
+
+# Past two days: failed
+make_health_sandbox
+run_health 50 50
+assert_eq "health: 50h local signal is fail" "fail" "$health_local"
+assert_eq "health: 50h exits 2" 2 "$health_rc"
+teardown_health_sandbox
+
+# -------------------------------------------------------------
 # Summary
 # -------------------------------------------------------------
 echo ""

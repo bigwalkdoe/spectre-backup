@@ -149,9 +149,9 @@ health_check() {
 
     local local_status="ok" off_status="ok" disk_status="ok" quota_status="ok" locks_status="ok"
 
-    # SLOs: local <1h ok, >2h deg, >24h fail
-    if [ $local_age_h -gt 24 ]; then local_status="fail"; overall=$rc_fail
-    elif [ $local_age_h -gt 2 ]; then local_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
+    # SLOs: local <=26h ok (daily timer + randomised delay), >26h deg, >48h fail
+    if [ $local_age_h -gt 48 ]; then local_status="fail"; overall=$rc_fail
+    elif [ $local_age_h -gt 26 ]; then local_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
     fi
     # offsite <24h ok, >36h deg, >72h fail
     if [ $off_age_h -gt 72 ]; then off_status="fail"; overall=$rc_fail

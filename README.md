@@ -106,7 +106,7 @@ Exit codes make it suitable for monitoring (cron, systemd OnFailure, uptime chec
 
 | Signal | ok | degraded | failed |
 |--------|-----|----------|--------|
-| Local snapshot age | ≤ 2h | > 2h | > 24h |
+| Local snapshot age | ≤ 26h | > 26h | > 48h |
 | Offsite snapshot age | ≤ 36h | > 36h | > 72h |
 | Local disk free | ≥ 25 GiB | < 25 GiB | < 15 GiB |
 | Offsite quota used | ≤ 85% | > 85% | > 95% |
