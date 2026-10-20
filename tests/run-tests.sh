@@ -430,7 +430,9 @@ EOF
 assert_not_exists() {
     local desc="$1" path="$2"
     TOTAL=$((TOTAL + 1))
-    if [ ! -e "$path" ]; then
+    # -L: a dangling symlink is still an artifact that must be gone; -e alone
+    # follows the link and would report a broken one as absent.
+    if [ ! -e "$path" ] && [ ! -L "$path" ]; then
         echo "  PASS: $desc"
         PASS=$((PASS + 1))
     else
@@ -519,10 +521,13 @@ make_legacy_sandbox
 mkdir -p "$XDG_DATA_HOME/bin" "$XDG_DATA_HOME/systemd/user"
 : > "$XDG_DATA_HOME/bin/fedora-back-up.sh"
 ln -sf fedora-back-up.sh "$XDG_DATA_HOME/bin/fedora-back-up"
+# A dangling link must also be cleaned up (-e follows links and misses it).
+ln -sf missing-target.sh "$XDG_DATA_HOME/bin/fedora-back-up-restore.sh"
 printf '[Timer]\n' > "$XDG_DATA_HOME/systemd/user/fedora-back-up.timer"
 run_migrate
 assert_eq "migration: leftovers returns 0" 0 "$rc"
 assert_not_exists "migration: leftover bin scripts removed" "$XDG_DATA_HOME/bin/fedora-back-up.sh"
+assert_not_exists "migration: leftover dangling symlink removed" "$XDG_DATA_HOME/bin/fedora-back-up-restore.sh"
 assert_not_exists "migration: leftover timer removed" "$XDG_DATA_HOME/systemd/user/fedora-back-up.timer"
 assert_grep "migration: leftover disable logged" '--user disable --now fedora-back-up.timer' "$SANDBOX/systemctl.log"
 teardown_legacy_sandbox

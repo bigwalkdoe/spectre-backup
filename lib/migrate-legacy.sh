@@ -177,7 +177,9 @@ migrate_legacy_install() {
     local old_scripts=("fedora-back-up.sh" "fedora-back-up-restore.sh" "fedora-back-up-verify.sh" "fedora-back-up-prune.sh" "backup-common.sh" "fedora-back-up")
     local s
     for s in "${old_scripts[@]}"; do
-        if [ -e "$bin_dir/$s" ]; then
+        # -L: a symlink whose target was just removed (the .sh above) is
+        # dangling, and -e follows links, so it must be checked separately.
+        if [ -e "$bin_dir/$s" ] || [ -L "$bin_dir/$s" ]; then
             rm -f "$bin_dir/$s"
             info "Removed legacy bin: $bin_dir/$s"
         fi
