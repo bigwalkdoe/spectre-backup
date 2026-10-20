@@ -402,11 +402,12 @@ teardown_legacy_sandbox() {
 build_legacy_fixture() {
     mkdir -p "$XDG_CONFIG_HOME/fedora-back-up" "$XDG_STATE_HOME/fedora-back-up" \
              "$XDG_DATA_HOME/bin" "$XDG_DATA_HOME/systemd/user" \
-             "$HOME/.config/rclone" "$SANDBOX/backups/fedora-back-up"
+             "$XDG_CONFIG_HOME/rclone" "$SANDBOX/backups/fedora-back-up"
     printf 'RESTIC_REPOSITORY="rclone:fedora-back-up:"\nRESTIC_REPOSITORY_LOCAL="%s/backups/fedora-back-up"\nLOG_DIR="%s/state/fedora-back-up"\n' \
         "$SANDBOX" "$SANDBOX" > "$XDG_CONFIG_HOME/fedora-back-up/.env"
     printf '# fedora-back-up - Included Paths\n/whatever\n' > "$XDG_CONFIG_HOME/fedora-back-up/include.conf"
-    printf 's3cr3t\n' > "$XDG_CONFIG_HOME/fedora-back-up/password"
+    # The token is deliberately embedded: the rewrite must never touch secrets.
+    printf 's3cr3t-fedora-back-up\n' > "$XDG_CONFIG_HOME/fedora-back-up/password"
     chmod 600 "$XDG_CONFIG_HOME/fedora-back-up/password"
     printf 'log line one\n' > "$XDG_STATE_HOME/fedora-back-up/backup.log"
     printf 'repo-marker\n' > "$SANDBOX/backups/fedora-back-up/config"
@@ -418,7 +419,7 @@ build_legacy_fixture() {
     ln -sf fedora-back-up.sh "$XDG_DATA_HOME/bin/fedora-back-up"
     printf '[Unit]\nDescription=old\n' > "$XDG_DATA_HOME/systemd/user/fedora-back-up.service"
     printf '[Timer]\n' > "$XDG_DATA_HOME/systemd/user/fedora-back-up.timer"
-    cat > "$HOME/.config/rclone/rclone.conf" <<EOF
+    cat > "$XDG_CONFIG_HOME/rclone/rclone.conf" <<EOF
 [fedora-back-up]
 type = drive
 token = {"secret":"keep-me"}
@@ -467,31 +468,34 @@ run_migrate() {
 # 1: fresh machine is a no-op
 make_legacy_sandbox
 run_migrate
-teardown_legacy_sandbox
 assert_eq "migration: fresh machine returns 0" 0 "$rc"
-assert_not_exists "migration: no migration archive on fresh machine" "$XDG_STATE_HOME/spectre-backup/migration-backup-*"
-assert_not_exists "migration: no config dir created on fresh machine" "$XDG_CONFIG_HOME/fedora-back-up"
+archive_count=$(ls -1d "$SANDBOX"/state/spectre-backup/migration-backup-* 2>/dev/null | wc -l || true)
+assert_eq "migration: no migration archive on fresh machine" 0 "$archive_count"
+assert_not_exists "migration: no new config dir created on fresh machine" "$SANDBOX/config/spectre-backup"
+assert_not_exists "migration: no legacy config dir created on fresh machine" "$SANDBOX/config/fedora-back-up"
+teardown_legacy_sandbox
 
 # 2: full legacy workstation converts
 make_legacy_sandbox
 build_legacy_fixture
 run_migrate
 assert_eq "migration: full legacy workstation returns 0" 0 "$rc"
-assert_grep "migration: rclone section renamed to [spectre-backup]" '^\[spectre-backup\]$' "$HOME/.config/rclone/rclone.conf"
-assert_grep "migration: rclone token line untouched" 'token = {"secret":"keep-me"}' "$HOME/.config/rclone/rclone.conf"
+assert_grep "migration: rclone section renamed to [spectre-backup]" '^\[spectre-backup\]$' "$XDG_CONFIG_HOME/rclone/rclone.conf"
+assert_grep "migration: rclone token line untouched" 'token = {"secret":"keep-me"}' "$XDG_CONFIG_HOME/rclone/rclone.conf"
 assert_file_exists "migration: repo moved, marker intact" "$SANDBOX/backups/spectre-backup/config"
 assert_not_exists "migration: old repo path gone" "$SANDBOX/backups/fedora-back-up/config"
 assert_file_exists "migration: config dir at new name" "$XDG_CONFIG_HOME/spectre-backup/.env"
 assert_grep "migration: .env RESTIC_REPOSITORY rewritten" 'RESTIC_REPOSITORY="rclone:spectre-backup:"' "$XDG_CONFIG_HOME/spectre-backup/.env"
 assert_grep "migration: .env RESTIC_REPOSITORY_LOCAL rewritten" 'RESTIC_REPOSITORY_LOCAL=.*spectre-backup' "$XDG_CONFIG_HOME/spectre-backup/.env"
 assert_grep "migration: .env LOG_DIR rewritten" 'LOG_DIR=.*spectre-backup' "$XDG_CONFIG_HOME/spectre-backup/.env"
-assert_grep "migration: password file unchanged" 's3cr3t' "$XDG_CONFIG_HOME/spectre-backup/password"
+assert_eq "migration: password file unchanged byte-for-byte" 's3cr3t-fedora-back-up' "$(cat "$XDG_CONFIG_HOME/spectre-backup/password")"
 assert_file_exists "migration: state dir moved with logs" "$XDG_STATE_HOME/spectre-backup/backup.log"
 archive_count=$(ls -1d "$XDG_STATE_HOME/spectre-backup"/migration-backup-* 2>/dev/null | wc -l)
 assert_eq "migration: one rollback archive created" 1 "$archive_count"
 archive_dir=$(ls -1d "$XDG_STATE_HOME/spectre-backup"/migration-backup-* 2>/dev/null | head -1)
 assert_file_exists "migration: archive holds legacy .env" "$archive_dir/.env"
 assert_file_exists "migration: archive holds legacy rclone.conf" "$archive_dir/rclone.conf"
+assert_eq "migration: archive holds the password" 's3cr3t-fedora-back-up' "$(cat "$archive_dir/password")"
 assert_not_exists "migration: old bin script gone" "$XDG_DATA_HOME/bin/fedora-back-up.sh"
 assert_not_exists "migration: old symlink gone" "$XDG_DATA_HOME/bin/fedora-back-up"
 assert_not_exists "migration: old service unit gone" "$XDG_DATA_HOME/systemd/user/fedora-back-up.service"
@@ -530,7 +534,7 @@ mkdir -p "$XDG_CONFIG_HOME/spectre-backup"
 run_migrate
 assert_eq "migration: ambiguous config aborts with 1" 1 "$rc"
 assert_file_exists "migration: abort leaves repo at old path" "$SANDBOX/backups/fedora-back-up/config"
-assert_grep "migration: abort leaves rclone.conf untouched" '\[fedora-back-up\]' "$HOME/.config/rclone/rclone.conf"
+assert_grep "migration: abort leaves rclone.conf untouched" '\[fedora-back-up\]' "$XDG_CONFIG_HOME/rclone/rclone.conf"
 assert_file_exists "migration: abort leaves bin scripts in place" "$XDG_DATA_HOME/bin/fedora-back-up.sh"
 teardown_legacy_sandbox
 
@@ -548,15 +552,15 @@ teardown_legacy_sandbox
 make_legacy_sandbox
 build_legacy_fixture
 printf 'RESTIC_REPOSITORY="rclone:fedora-back-up:"\nLOG_DIR="%s/state/fedora-back-up"\n' "$SANDBOX" > "$XDG_CONFIG_HOME/fedora-back-up/.env"
-cat > "$HOME/.config/rclone/rclone.conf" <<EOF
+cat > "$XDG_CONFIG_HOME/rclone/rclone.conf" <<EOF
 [gdrive]
 type = drive
 EOF
 run_migrate
 assert_eq "migration: offsite-only custom remote returns 0" 0 "$rc"
-assert_grep "migration: custom rclone remote untouched" '^\[gdrive\]$' "$HOME/.config/rclone/rclone.conf"
+assert_grep "migration: custom rclone remote untouched" '^\[gdrive\]$' "$XDG_CONFIG_HOME/rclone/rclone.conf"
 TOTAL=$((TOTAL + 1))
-if grep -q '^\[spectre-backup\]$' "$HOME/.config/rclone/rclone.conf"; then
+if grep -q '^\[spectre-backup\]$' "$XDG_CONFIG_HOME/rclone/rclone.conf"; then
     echo "  FAIL: migration: no [spectre-backup] section added"
     FAIL=$((FAIL + 1))
 else
@@ -580,7 +584,96 @@ assert_eq "migration: failing systemctl still returns 0" 0 "$rc"
 assert_not_exists "migration: units removed despite failing systemctl" "$XDG_DATA_HOME/systemd/user/fedora-back-up.timer"
 teardown_legacy_sandbox
 
-# 9: installer calls migration before resolve_dirs
+# 9: single-quoted .env values still move the repo
+make_legacy_sandbox
+build_legacy_fixture
+printf "RESTIC_REPOSITORY='rclone:fedora-back-up:'\nRESTIC_REPOSITORY_LOCAL='%s/backups/fedora-back-up'\nLOG_DIR=\"%s/state/fedora-back-up\"\n" "$SANDBOX" "$SANDBOX" > "$XDG_CONFIG_HOME/fedora-back-up/.env"
+run_migrate
+assert_eq "migration: single-quoted .env returns 0" 0 "$rc"
+assert_file_exists "migration: single-quoted repo path still moved" "$SANDBOX/backups/spectre-backup/config"
+assert_not_exists "migration: single-quoted old repo path gone" "$SANDBOX/backups/fedora-back-up/config"
+assert_grep "migration: single-quoted .env rewritten" "RESTIC_REPOSITORY_LOCAL=.*spectre-backup" "$XDG_CONFIG_HOME/spectre-backup/.env"
+teardown_legacy_sandbox
+
+# 10: missing repo dir aborts instead of orphaning .env
+make_legacy_sandbox
+build_legacy_fixture
+rm -rf "$SANDBOX/backups/fedora-back-up"
+run_migrate
+assert_eq "migration: missing repo dir aborts with 1" 1 "$rc"
+assert_file_exists "migration: abort leaves legacy config in place" "$XDG_CONFIG_HOME/fedora-back-up/.env"
+assert_grep "migration: abort leaves .env repo path untouched" 'backups/fedora-back-up' "$XDG_CONFIG_HOME/fedora-back-up/.env"
+assert_not_exists "migration: abort does not create new config dir" "$XDG_CONFIG_HOME/spectre-backup"
+assert_not_exists "migration: abort does not create target repo" "$SANDBOX/backups/spectre-backup"
+teardown_legacy_sandbox
+
+# 11: a neutral repo path (no old product name) is left in place
+make_legacy_sandbox
+build_legacy_fixture
+mv "$SANDBOX/backups/fedora-back-up" "$SANDBOX/backups/restic-repo"
+printf 'RESTIC_REPOSITORY="rclone:fedora-back-up:"\nRESTIC_REPOSITORY_LOCAL="%s/backups/restic-repo"\nLOG_DIR="%s/state/fedora-back-up"\n' "$SANDBOX" "$SANDBOX" > "$XDG_CONFIG_HOME/fedora-back-up/.env"
+run_migrate
+assert_eq "migration: neutral repo path returns 0" 0 "$rc"
+assert_file_exists "migration: neutral repo path untouched" "$SANDBOX/backups/restic-repo/config"
+assert_grep "migration: neutral repo value unchanged in .env" 'backups/restic-repo' "$XDG_CONFIG_HOME/spectre-backup/.env"
+assert_grep "migration: neutral repo run still rewrites LOG_DIR" 'LOG_DIR=.*spectre-backup' "$XDG_CONFIG_HOME/spectre-backup/.env"
+teardown_legacy_sandbox
+
+# 12: interrupted migration (moved but not rewritten) is repaired on re-run
+make_legacy_sandbox
+build_legacy_fixture
+run_migrate
+sed -i 's/spectre-backup/fedora-back-up/g' "$XDG_CONFIG_HOME/spectre-backup/.env"
+run_migrate
+assert_eq "migration: repair re-run returns 0" 0 "$rc"
+assert_grep "migration: repair rewrites stale .env" 'RESTIC_REPOSITORY="rclone:spectre-backup:"' "$XDG_CONFIG_HOME/spectre-backup/.env"
+TOTAL=$((TOTAL + 1))
+if grep -q 'fedora-back-up' "$XDG_CONFIG_HOME/spectre-backup/.env"; then
+    echo "  FAIL: migration: repair leaves no old token in .env"
+    FAIL=$((FAIL + 1))
+else
+    echo "  PASS: migration: repair leaves no old token in .env"
+    PASS=$((PASS + 1))
+fi
+teardown_legacy_sandbox
+
+# 13: installer-context invocation (errexit) survives an offsite-only .env
+make_legacy_sandbox
+build_legacy_fixture
+printf 'RESTIC_REPOSITORY="rclone:fedora-back-up:"\nLOG_DIR="%s/state/fedora-back-up"\n' "$SANDBOX" > "$XDG_CONFIG_HOME/fedora-back-up/.env"
+TOTAL=$((TOTAL + 1))
+# Not run inside `if`/`&&`: a condition context suppresses errexit even in a
+# subshell, which would make this test pass no matter what.
+set +e
+( set -euo pipefail; migrate_legacy_install ) >/dev/null 2>&1
+rc_errexit=$?
+set -e
+if [ "$rc_errexit" -eq 0 ]; then
+    echo "  PASS: migration: survives errexit with offsite-only .env"
+    PASS=$((PASS + 1))
+else
+    echo "  FAIL: migration: dies under errexit with offsite-only .env (rc=$rc_errexit)"
+    FAIL=$((FAIL + 1))
+fi
+assert_file_exists "migration: errexit run still moves config" "$XDG_CONFIG_HOME/spectre-backup/.env"
+teardown_legacy_sandbox
+
+# 14: password containing the old token is never rewritten
+make_legacy_sandbox
+build_legacy_fixture
+printf 'my-fedora-back-up-pass\n' > "$XDG_CONFIG_HOME/fedora-back-up/password"
+run_migrate
+assert_eq "migration: secret password migrated intact" 0 "$rc"
+assert_eq "migration: secret password byte-identical" 'my-fedora-back-up-pass' "$(cat "$XDG_CONFIG_HOME/spectre-backup/password")"
+teardown_legacy_sandbox
+
+# 15: the legacy timer is disabled before the repository moves
+ml="$PROJECT_DIR/lib/migrate-legacy.sh"
+disable_line=$(grep -n 'user disable --now fedora-back-up.timer' "$ml" | head -1 | cut -d: -f1)
+move_line=$(grep -n 'Moving repository' "$ml" | head -1 | cut -d: -f1)
+assert_eq "migration: timer disabled before repo move" "yes" "$([ -n "$disable_line" ] && [ -n "$move_line" ] && [ "$disable_line" -lt "$move_line" ] && echo yes || echo no)"
+
+# 16: installer calls migration before resolve_dirs
 installer="$PROJECT_DIR/scripts/spectre-backup-install.sh"
 call_line=$(grep -n 'migrate_legacy_install' "$installer" | head -1 | cut -d: -f1)
 resolve_line=$(grep -n '^resolve_dirs' "$installer" | head -1 | cut -d: -f1)

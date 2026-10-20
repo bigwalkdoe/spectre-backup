@@ -44,6 +44,11 @@ Safety rules the migration follows:
 
 - **It never merges repositories.** If both the old and new paths exist, it
   stops and reports instead of guessing.
+- **It never points `.env` at a missing repository.** If the old path is
+  absent (an unmounted drive, for example), it stops rather than letting the
+  next run initialize an empty repository.
+- **It never touches your password.** The password file is archived for
+  rollback but never rewritten.
 - **It is idempotent.** An interrupted migration is finished by re-running
   the installer; completed steps are skipped.
 - **Old snapshots keep their old tags.** Tags are immutable history; new
@@ -56,7 +61,7 @@ installer — they need `sudo`, so it only prints the commands:
 
 ```bash
 sudo systemctl disable --now fedora-back-up.timer
-sudo rm /etc/systemd/system/fedora-back-up.service /etc/systemd/system/fedora-back-up.timer
+sudo rm -f /etc/systemd/system/fedora-back-up.service /etc/systemd/system/fedora-back-up.timer
 sudo systemctl daemon-reload
 ```
 
