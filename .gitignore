@@ -2,7 +2,18 @@
 *.log
 *.swp
 *.swo
+*.bak
+*.tmp
+*.orig
+*.rej
 
 # OS files
 .DS_Store
 Thumbs.db
+
+# Agent scratch workspace (superpowers skills) — never part of the product
+.superpowers/
+
+# Local configuration and secrets — only the .example template is tracked
+.env
+password

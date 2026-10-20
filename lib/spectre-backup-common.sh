@@ -27,6 +27,7 @@ detect_distro() {
         DISTRO_VERSION_ID="${VERSION_ID:-}"
     elif command -v lsb_release >/dev/null 2>&1; then
         DISTRO_ID=$(lsb_release -si 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        # shellcheck disable=SC2034  # library API, read by the health output
         DISTRO_VERSION_ID=$(lsb_release -sr 2>/dev/null)
     else
         error "Cannot detect Linux distribution"
@@ -96,7 +97,6 @@ resolve_dirs() {
     CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/spectre-backup"
     STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
     BIN_DIR="${XDG_DATA_HOME:-$HOME/.local}/bin"
-    SYSTEM_CONFIG_DIR="/etc/spectre-backup"
     mkdir -p "$CONFIG_DIR" "$STATE_DIR" "$BIN_DIR"
 }
 
@@ -128,15 +128,13 @@ load_env() {
         env_file="${PROJECT_DIR}/config/.env.example"
     fi
     if [ -n "$env_file" ] && [ -f "$env_file" ]; then
-        set -a; source "$env_file"; set +a
+        set -a
+        # shellcheck disable=SC1090  # config path is resolved at runtime
+        source "$env_file"
+        set +a
         return 0
     fi
     return 1
-}
-
-# --- Determine the restic repository from env, with a sensible default ---
-repo_from_env() {
-    echo "${RESTIC_REPOSITORY:-rclone:spectre-backup:}"
 }
 
 # --- Build a target list from an include file ---

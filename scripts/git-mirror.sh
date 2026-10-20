@@ -4,7 +4,7 @@
 #
 # Why this exists
 # ---------------
-# /home/deon/dev is ~20G, but exclude.conf already drops node_modules, .venv,
+# ~/dev is ~20G, but exclude.conf already drops node_modules, .venv,
 # dist and build, so only ~4.3G of it ever reached the backup. The .git
 # directories account for just ~342M of that. So the working trees were being
 # copied to save history that the .git dirs already contain.
@@ -14,7 +14,7 @@
 # spectre-system-maintenance-suite had two commits that existed on no remote --
 # a `git clone` of any repo here would have silently lost them.
 #
-# The offsite leg already excludes /home/deon/dev entirely, on the reasoning
+# The offsite leg already excludes ~/dev entirely, on the reasoning
 # that every repo is on GitHub. This script covers the gap that reasoning
 # leaves: commits that are not on GitHub yet.
 #

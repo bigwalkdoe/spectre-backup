@@ -57,6 +57,15 @@ if [ -z "$ROLE" ]; then
 fi
 info "Role: $ROLE"
 
+# The server unit runs /root/.local/bin/spectre-backup.sh as root. A non-root
+# install would put the scripts in another user's home and the unit would fail
+# with 203/EXEC, so require root up front.
+if [ "$ROLE" = "server" ] && [ "$(id -u)" -ne 0 ]; then
+    error "Server installs must run as root (the system unit runs /root/.local/bin/spectre-backup.sh)"
+    error "Re-run with: sudo $0 --role=server"
+    exit 1
+fi
+
 # Legacy rename migration (before resolve_dirs so detection sees real state)
 if [ "$INSTALL_BIN_ONLY" = true ]; then
     info "Skipping legacy migration (--bin-only)"
@@ -67,6 +76,12 @@ fi
 
 # --- Resolve directories ---
 resolve_dirs
+
+# The system unit runs /root/.local/bin/spectre-backup.sh; pin the server
+# install location so a preserved HOME cannot produce a 203/EXEC unit.
+if [ "$ROLE" = "server" ]; then
+    BIN_DIR="/root/.local/bin"
+fi
 
 # --- Determine config source path ---
 CONFIG_SOURCE="$PROJECT_DIR/config/$ROLE/$DISTRO_ID"
@@ -349,7 +364,7 @@ else
         # System service (runs as root, no user session needed)
         SYSTEMD_DIR="/etc/systemd/system"
         sudo mkdir -p "$SYSTEMD_DIR"
-        sudo cp "$PROJECT_DIR/systemd/spectre-backup.service" "$SYSTEMD_DIR/"
+        sudo cp "$PROJECT_DIR/systemd/spectre-backup-system.service" "$SYSTEMD_DIR/spectre-backup.service"
         sudo cp "$PROJECT_DIR/systemd/spectre-backup.timer" "$SYSTEMD_DIR/"
         sudo systemctl daemon-reload
 

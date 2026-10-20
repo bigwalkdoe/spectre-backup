@@ -9,9 +9,9 @@ Encrypted, automated, versioned backup platform for Linux workstations and serve
 | Distro | Role | Install command |
 |--------|------|-----------------|
 | Fedora | Workstation | `./scripts/spectre-backup-install.sh --role=workstation` |
-| Fedora | Server | `./scripts/spectre-backup-install.sh --role=server` |
+| Fedora | Server | `sudo ./scripts/spectre-backup-install.sh --role=server` |
 | Ubuntu | Workstation | `./scripts/spectre-backup-install.sh --role=workstation` |
-| Ubuntu | Server | `./scripts/spectre-backup-install.sh --role=server` |
+| Ubuntu | Server | `sudo ./scripts/spectre-backup-install.sh --role=server` |
 
 Role is auto-detected if not specified: a graphical session means workstation, otherwise server. Override with `--role=workstation|server` or the `SPECTRE_BACKUP_ROLE` environment variable.
 
@@ -56,8 +56,8 @@ cd spectre-backup
 # Workstation (default if a desktop session is detected)
 ./scripts/spectre-backup-install.sh --role=workstation
 
-# Server (system systemd service, runs as root)
-./scripts/spectre-backup-install.sh --role=server
+# Server (system systemd service, runs as root — install with sudo)
+sudo ./scripts/spectre-backup-install.sh --role=server
 ```
 
 The installer will:

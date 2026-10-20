@@ -108,8 +108,8 @@ multi-distro, multi-role platform.
 | Distros | Fedora only (`dnf`) | Fedora (`dnf`) and Ubuntu (`apt`) |
 | Roles | Workstation only | Workstation + server |
 | Config location | `~/.config/fedora-back-up/` | `~/.config/spectre-backup/` (workstation) or `/etc/spectre-backup/` (server) |
-| Config scope | Hardcoded `/home/deon/...` paths | Role- and distro-specific scopes in `config/<role>/<distro>/` |
-| Paths | `/home/deon/dev` (working trees) | `~/.git-mirror` (bare mirrors, history only) |
+| Config scope | Hardcoded `/home/<user>/...` paths | Role- and distro-specific scopes in `config/<role>/<distro>/` |
+| Paths | `~/dev` (working trees) | `~/.git-mirror` (bare mirrors, history only) |
 | systemd | User service only | User service (workstation) + system service (server) |
 | Password | `~/.config/spectre-backup/password` | Same (workstation) or `/etc/spectre-backup/password` (server) |
 
@@ -164,7 +164,7 @@ Key changes to consider:
 - **`exclude.conf` now drops derived content** (Chrome AI model, VS Code extension cache, opencode state, Baloo index, core dumps) — about 10.8 GiB saved per snapshot.
 - **Offsite scope is separate** (`include-remote.conf`). Only irreplaceable small data goes to Google Drive (keys, dotfiles, editor config). The rest is local-only.
 
-If you previously had `/home/deon/dev` in your includes, you can remove it — `~/.git-mirror` replaces it for history protection.
+If you previously had `~/dev` in your includes, you can remove it — `~/.git-mirror` replaces it for history protection.
 
 ## Step 3: Verify everything works
 

@@ -83,6 +83,7 @@ notify() {
     fi
 }
 
+# shellcheck disable=SC2329  # invoked by the EXIT trap below
 cleanup() {
     rm -rf "$DUMPS_DIR" 2>/dev/null || true
 }
@@ -101,7 +102,8 @@ health_check() {
         esac
     done
 
-    local now=$(date -u +%s)
+    local now
+    now=$(date -u +%s)
     local local_newest_ts="" local_newest_iso=""
     local off_newest_ts="" off_newest_iso=""
     local local_count=0 off_count=0
@@ -169,10 +171,18 @@ health_check() {
         fi
     fi
 
+    # One status word for both output formats (0=ok, 1=degraded, 2=failed)
+    local status_word status_label
+    case $overall in
+        0) status_word="ok";       status_label="OK" ;;
+        1) status_word="degraded"; status_label="DEGRADED" ;;
+        *) status_word="failed";   status_label="FAILED" ;;
+    esac
+
     if [ $out_json -eq 1 ]; then
         cat <<JSON
 {
-  "status": "$( [ $overall -eq 0 ] && echo ok || ([ $overall -eq 1 ] && echo degraded || echo failed) )",
+  "status": "$status_word",
   "exit_code": $overall,
   "distro": "$DISTRO_ID",
   "role": "$ROLE",
@@ -185,7 +195,7 @@ health_check() {
 JSON
         return $overall
     else
-        echo "health: $( [ $overall -eq 0 ] && echo OK || ([ $overall -eq 1 ] && echo DEGRADED || echo FAILED) )"
+        echo "health: $status_label"
         echo "  distro:  $DISTRO_ID $DISTRO_VERSION_ID"
         echo "  role:    $ROLE"
         echo "  local:   count=$local_count age_h=$local_age_h status=$local_status (newest=$local_newest_iso)"
@@ -352,7 +362,7 @@ if [ "$CONTAINERS_ENABLED" = "true" ]; then
             if [ -d "$dir" ]; then
                 find "$dir" -maxdepth 5 \( -name "docker-compose*.yml" -o -name "compose*.yml" -o -name "Dockerfile" \) 2>/dev/null \
                     | while IFS= read -r f; do
-                        rel="${f#$dir/}"
+                        rel="${f#"$dir"/}"
                         mkdir -p "$CONTAINER_DIR/compose/$(dirname "$rel")"
                         cp "$f" "$CONTAINER_DIR/compose/$rel" 2>/dev/null || true
                     done || true
@@ -374,7 +384,7 @@ if [ "$CONTAINERS_ENABLED" = "true" ]; then
     # Containerfile / Dockerfile in home and common locations
     find "$HOME" -maxdepth 3 \( -name "Containerfile" -o -name "Dockerfile" \) 2>/dev/null \
         | head -20 | while IFS= read -r f; do
-            rel="${f#$HOME/}"
+            rel="${f#"$HOME"/}"
             mkdir -p "$CONTAINER_DIR/containerfiles/$(dirname "$rel")"
             cp "$f" "$CONTAINER_DIR/containerfiles/$rel" 2>/dev/null || true
         done || true
@@ -404,6 +414,7 @@ BACKUP_TARGETS=()
 # build_targets <include_file> -> populates TARGETS_OUT
 build_targets() {
     local file="$1"
+    # shellcheck disable=SC2178  # nameref: the string is the name of a caller array
     local -n out_ref="$2"
     out_ref=()
     [ -f "$file" ] && [ -s "$file" ] || return 1

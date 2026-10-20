@@ -17,6 +17,20 @@ PASS=0
 FAIL=0
 TOTAL=0
 
+# Sandboxes are registered here and removed on exit, so an aborted run does
+# not leave /tmp/spectre-* directories behind.
+CLEANUP_DIRS=()
+# shellcheck disable=SC2329  # invoked by the EXIT trap below
+cleanup_sandboxes() {
+    if [ "${#CLEANUP_DIRS[@]}" -gt 0 ]; then
+        local d
+        for d in "${CLEANUP_DIRS[@]}"; do
+            rm -rf "$d"
+        done
+    fi
+}
+trap cleanup_sandboxes EXIT
+
 assert_eq() {
     local desc="$1" expected="$2" actual="$3"
     TOTAL=$((TOTAL + 1))
@@ -233,6 +247,7 @@ else
 fi
 
 TOTAL=$((TOTAL + 1))
+# shellcheck disable=SC2016  # the pattern is literal text being searched for
 if grep -n -- '--tag "$ROLE"' "$PROJECT_DIR/scripts/spectre-backup.sh" >/dev/null 2>&1; then
     echo "  PASS: role tag comes from \$ROLE"
     PASS=$((PASS + 1))
@@ -297,6 +312,29 @@ echo "--- Systemd units ---"
 assert_file_exists "User service"    "$PROJECT_DIR/systemd/spectre-backup.service"
 assert_file_exists "System service"  "$PROJECT_DIR/systemd/spectre-backup-system.service"
 assert_file_exists "Timer"           "$PROJECT_DIR/systemd/spectre-backup.timer"
+
+TOTAL=$((TOTAL + 1))
+server_unit_copy=$(grep -n 'spectre-backup-system.service.*SYSTEMD_DIR/spectre-backup.service' "$PROJECT_DIR/scripts/spectre-backup-install.sh" || true)
+if [ -n "$server_unit_copy" ]; then
+    echo "  PASS: server install uses the system unit"
+    PASS=$((PASS + 1))
+else
+    echo "  FAIL: server install does not copy spectre-backup-system.service"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ "$(id -u)" -eq 0 ]; then
+    echo "  SKIP: server install refuses non-root (test runs as root)"
+else
+    set +e
+    guard_out=$("$PROJECT_DIR/scripts/spectre-backup-install.sh" --role=server --bin-only 2>&1)
+    guard_rc=$?
+    set -e
+    assert_eq "server install refuses non-root" "1" "$guard_rc"
+    assert_eq "server install explains the fix" "yes" "$(printf '%s' "$guard_out" | grep -q 'sudo' && echo yes || echo no)"
+fi
+
+assert_eq "server scripts install under /root/.local/bin" "yes" "$(grep -q 'BIN_DIR="/root/.local/bin"' "$PROJECT_DIR/scripts/spectre-backup-install.sh" && echo yes || echo no)"
 
 # -------------------------------------------------------------
 # Test group: naming guards
@@ -367,6 +405,7 @@ SANDBOX=""
 
 make_legacy_sandbox() {
     SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/spectre-migtest.XXXXXX")
+    CLEANUP_DIRS+=("$SANDBOX")
     export SANDBOX
     SAVED_HOME="${HOME:-}"
     SAVED_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}"
@@ -471,7 +510,7 @@ run_migrate() {
 make_legacy_sandbox
 run_migrate
 assert_eq "migration: fresh machine returns 0" 0 "$rc"
-archive_count=$(ls -1d "$SANDBOX"/state/spectre-backup/migration-backup-* 2>/dev/null | wc -l || true)
+archive_count=$(find "$SANDBOX/state/spectre-backup" -maxdepth 1 -type d -name 'migration-backup-*' 2>/dev/null | wc -l || true)
 assert_eq "migration: no migration archive on fresh machine" 0 "$archive_count"
 assert_not_exists "migration: no new config dir created on fresh machine" "$SANDBOX/config/spectre-backup"
 assert_not_exists "migration: no legacy config dir created on fresh machine" "$SANDBOX/config/fedora-back-up"
@@ -492,9 +531,9 @@ assert_grep "migration: .env RESTIC_REPOSITORY_LOCAL rewritten" 'RESTIC_REPOSITO
 assert_grep "migration: .env LOG_DIR rewritten" 'LOG_DIR=.*spectre-backup' "$XDG_CONFIG_HOME/spectre-backup/.env"
 assert_eq "migration: password file unchanged byte-for-byte" 's3cr3t-fedora-back-up' "$(cat "$XDG_CONFIG_HOME/spectre-backup/password")"
 assert_file_exists "migration: state dir moved with logs" "$XDG_STATE_HOME/spectre-backup/backup.log"
-archive_count=$(ls -1d "$XDG_STATE_HOME/spectre-backup"/migration-backup-* 2>/dev/null | wc -l)
+archive_count=$(find "$XDG_STATE_HOME/spectre-backup" -maxdepth 1 -type d -name 'migration-backup-*' 2>/dev/null | wc -l || true)
 assert_eq "migration: one rollback archive created" 1 "$archive_count"
-archive_dir=$(ls -1d "$XDG_STATE_HOME/spectre-backup"/migration-backup-* 2>/dev/null | head -1)
+archive_dir=$(find "$XDG_STATE_HOME/spectre-backup" -maxdepth 1 -type d -name 'migration-backup-*' 2>/dev/null | head -1 || true)
 assert_file_exists "migration: archive holds legacy .env" "$archive_dir/.env"
 assert_file_exists "migration: archive holds legacy rclone.conf" "$archive_dir/rclone.conf"
 assert_eq "migration: archive holds the password" 's3cr3t-fedora-back-up' "$(cat "$archive_dir/password")"
@@ -511,7 +550,7 @@ make_legacy_sandbox
 build_legacy_fixture
 run_migrate
 run_migrate
-archive_count=$(ls -1d "$XDG_STATE_HOME/spectre-backup"/migration-backup-* 2>/dev/null | wc -l)
+archive_count=$(find "$XDG_STATE_HOME/spectre-backup" -maxdepth 1 -type d -name 'migration-backup-*' 2>/dev/null | wc -l || true)
 assert_eq "migration: re-run returns 0" 0 "$rc"
 assert_eq "migration: still one rollback archive after re-run" 1 "$archive_count"
 teardown_legacy_sandbox
@@ -690,7 +729,8 @@ echo ""
 echo "--- Health check SLOs ---"
 
 make_health_sandbox() {
-    SANDBOX=$(mktemp -d "/tmp/spectre-health.XXXXXX")
+    SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/spectre-health.XXXXXX")
+    CLEANUP_DIRS+=("$SANDBOX")
     export SANDBOX
     mkdir -p "$SANDBOX/config/spectre-backup" "$SANDBOX/state" "$SANDBOX/home" \
              "$SANDBOX/repo" "$SANDBOX/stubbin"
@@ -742,13 +782,11 @@ run_health() {
     set -e
     # The script routes stdout through tee (process substitution), which can
     # land a moment after it exits.
-    local i
-    for i in $(seq 1 20); do
+    for _ in $(seq 1 20); do
         jq -e . "$SANDBOX/health.json" >/dev/null 2>&1 && break
         sleep 0.1
     done
     health_local=$(jq -r '.local.status' "$SANDBOX/health.json" 2>/dev/null || echo "parse-error")
-    health_overall=$(jq -r '.status' "$SANDBOX/health.json" 2>/dev/null || echo "parse-error")
 }
 
 # A few hours old: ok (regression guard for the normal case)
