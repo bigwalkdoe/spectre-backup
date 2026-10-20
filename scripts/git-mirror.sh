@@ -40,8 +40,8 @@ while [ $# -gt 0 ]; do
 done
 
 if [ ! -d "$SRC_ROOT" ]; then
-    printf 'git-mirror.sh: source not found: %s\n' "$SRC_ROOT" >&2
-    exit 1
+    printf 'git-mirror: no source dir at %s — nothing to mirror\n' "$SRC_ROOT" >&2
+    exit 0
 fi
 
 mkdir -p "$DEST"

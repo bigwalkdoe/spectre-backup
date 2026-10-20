@@ -461,7 +461,7 @@ RESTIC_COMMON_ARGS+=(--verbose)
 # would have mislabelled every server snapshot.
 RESTIC_COMMON_ARGS+=(--tag "spectre-backup")
 RESTIC_COMMON_ARGS+=(--tag "$ROLE")
-RESTIC_COMMON_ARGS+=(--host "$(hostname)")
+RESTIC_COMMON_ARGS+=(--host "${HOSTNAME:-$(uname -n)}")
 
 if [ -f "$EXCLUDE_FILE" ] && [ -s "$EXCLUDE_FILE" ]; then
     RESTIC_COMMON_ARGS+=(--exclude-file "$EXCLUDE_FILE")
