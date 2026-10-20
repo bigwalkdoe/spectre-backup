@@ -1,0 +1,44 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu:
+    name: Ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            --no-install-recommends jq restic rclone shellcheck findutils
+      - name: Run test suite
+        run: ./tests/run-tests.sh
+
+  fedora:
+    name: Fedora
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: fedora:latest
+    steps:
+      # checkout runs inside the container and needs git before it can clone
+      - name: Prepare container
+        run: dnf install -y git ca-certificates
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: dnf install -y jq restic rclone ShellCheck findutils
+      - name: Run test suite
+        run: ./tests/run-tests.sh

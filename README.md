@@ -1,5 +1,7 @@
 # spectre-backup
 
+[![tests](https://github.com/bigwalkdoe/spectre-backup/actions/workflows/tests.yml/badge.svg)](https://github.com/bigwalkdoe/spectre-backup/actions/workflows/tests.yml)
+
 Encrypted, automated, versioned backup platform for Linux workstations and servers.
 
 **Target: New machine → Fully operational in under 2 hours**

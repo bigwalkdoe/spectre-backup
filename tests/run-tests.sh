@@ -84,9 +84,27 @@ echo ""
 # -------------------------------------------------------------
 echo "--- Distro detection ---"
 detect_distro || { echo "FAIL: detect_distro returned non-zero"; exit 1; }
-assert_eq "DISTRO_ID is set" "fedora" "$DISTRO_ID"
-assert_eq "PKG_MANAGER is set" "dnf" "$PKG_MANAGER"
-assert_eq "PKG_INSTALL is set" "dnf install -y" "$PKG_INSTALL"
+
+TOTAL=$((TOTAL + 1))
+case "$DISTRO_ID" in
+    fedora|ubuntu|debian)
+        echo "  PASS: DISTRO_ID is supported ($DISTRO_ID)"
+        PASS=$((PASS + 1))
+        ;;
+    *)
+        echo "  FAIL: unsupported DISTRO_ID '$DISTRO_ID'"
+        FAIL=$((FAIL + 1))
+        ;;
+esac
+
+expected_manager=""
+expected_install=""
+case "$DISTRO_ID" in
+    fedora)        expected_manager="dnf"; expected_install="dnf install -y" ;;
+    ubuntu|debian) expected_manager="apt"; expected_install="apt-get install -y" ;;
+esac
+assert_eq "PKG_MANAGER matches the distro" "$expected_manager" "$PKG_MANAGER"
+assert_eq "PKG_INSTALL matches the distro" "$expected_install" "$PKG_INSTALL"
 
 # Test install_packages skips already-installed packages
 echo ""
