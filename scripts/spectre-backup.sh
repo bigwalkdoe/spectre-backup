@@ -255,6 +255,7 @@ QUIET=false
 JSON_OUTPUT=false
 DEBUG=false
 COUNT_ONLY=false
+COUNT_LOCAL=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -285,6 +286,9 @@ for arg in "$@"; do
         --count)
             COUNT_ONLY=true
             ;;
+        --count-local)
+            COUNT_LOCAL=true
+            ;;
         --help|-h)
             echo "Usage: $0 [--health [--json]] [--no-prune] [--no-notify]"
             echo ""
@@ -298,6 +302,7 @@ for arg in "$@"; do
             echo "  --json       Print a JSON summary at the end"
             echo "  --debug      Enable shell tracing (set -x)"
             echo "  --count      Print snapshot count for the offsite repository and exit"
+            echo "  --count-local Print snapshot count for the local repository and exit"
             exit 0
             ;;
         --version)
@@ -335,6 +340,17 @@ if [ "$DEBUG" = true ]; then set -x; fi
 if [ "$COUNT_ONLY" = true ]; then
     export RESTIC_PASSWORD_COMMAND="cat ${RESTIC_PASSWORD_FILE}"
     n=$(timeout 120 restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
+    echo "$n"
+    exit 0
+fi
+
+if [ "$COUNT_LOCAL" = true ]; then
+    if [ -z "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+        echo "No local repository configured (RESTIC_REPOSITORY_LOCAL)" >&2
+        exit 1
+    fi
+    export RESTIC_PASSWORD_COMMAND="cat ${RESTIC_PASSWORD_FILE}"
+    n=$(timeout 120 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
     echo "$n"
     exit 0
 fi
