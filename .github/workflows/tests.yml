@@ -25,6 +25,9 @@ jobs:
           sudo apt-get update -qq
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
             --no-install-recommends jq restic rclone shellcheck findutils
+      - name: ShellCheck
+        run: shellcheck -S warning scripts/*.sh lib/*.sh
+
       - name: Run test suite
         run: ./tests/run-tests.sh
 
