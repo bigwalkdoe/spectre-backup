@@ -843,6 +843,39 @@ assert_eq "health: 50h exits 2" 2 "$health_rc"
 teardown_health_sandbox
 
 # -------------------------------------------------------------
+# Test group: CLI help / flag parsing
+# -------------------------------------------------------------
+echo ""
+echo "--- CLI help ---"
+
+for script in spectre-backup.sh spectre-backup-restore.sh spectre-backup-verify.sh spectre-backup-prune.sh; do
+    TOTAL=$((TOTAL + 1))
+    if "$PROJECT_DIR/scripts/$script" --help >/dev/null 2>&1; then
+        echo "  PASS: $script --help exits 0"
+        PASS=$((PASS + 1))
+    else
+        echo "  FAIL: $script --help non-zero"
+        FAIL=$((FAIL + 1))
+    fi
+done
+
+# Restore --local without config should fail gracefully (not crash)
+TOTAL=$((TOTAL + 1))
+set +e
+"$PROJECT_DIR/scripts/spectre-backup-restore.sh" --local --yes --dry-run >/dev/null 2>&1
+rc=$?
+set -e
+# Either succeeds (if local repo configured) or fails with a clear error; must
+# not segfault. Accept any non-127/139 exit.
+if [ "$rc" -ne 127 ] && [ "$rc" -ne 139 ]; then
+    echo "  PASS: restore --local runs without crashing (rc=$rc)"
+    PASS=$((PASS + 1))
+else
+    echo "  FAIL: restore --local crashed (rc=$rc)"
+    FAIL=$((FAIL + 1))
+fi
+
+# -------------------------------------------------------------
 # Summary
 # -------------------------------------------------------------
 echo ""
