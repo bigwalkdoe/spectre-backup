@@ -87,7 +87,7 @@ notify() {
 cleanup() {
     rm -rf "$DUMPS_DIR" 2>/dev/null || true
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 # ============================================================
 # Health check
