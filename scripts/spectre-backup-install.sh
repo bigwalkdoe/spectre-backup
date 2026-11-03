@@ -338,7 +338,14 @@ if [ "$INSTALL_BIN_ONLY" = true ]; then
 else
     header "Step 8: Initializing Restic repository"
 
+    # Honour a repository already declared in .env (e.g. a custom remote or
+    # local path) rather than always assuming the default rclone remote.
     REPO="rclone:spectre-backup:"
+    if [ -f "$INSTALL_CONFIG_DIR/.env" ]; then
+        # shellcheck disable=SC1090
+        . "$INSTALL_CONFIG_DIR/.env" 2>/dev/null || true
+        REPO="${RESTIC_REPOSITORY:-$REPO}"
+    fi
     export RESTIC_PASSWORD_COMMAND="cat $PASSWORD_FILE"
     if restic -r "$REPO" snapshots >/dev/null 2>&1; then
         info "Restic repository already initialized"
