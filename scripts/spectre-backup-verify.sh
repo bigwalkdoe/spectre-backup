@@ -54,11 +54,13 @@ for arg in "$@"; do
         --password-file=*) RESTIC_PASSWORD_FILE="${arg#*=}" ;;
         --debug|--trace) DEBUG=true ;;
         --json) JSON_OUTPUT=true ;;
+        --env) PRINT_ENV=true ;;
         --help|-h)
             echo "Usage: $0 [--full] [--role=workstation|server]"
             echo ""
             echo "  --full   Full verification (reads all data, checks pack files)"
             echo "  --json   Machine-readable JSON summary"
+            echo "  --env    Print resolved configuration and exit"
             echo "  (default) Quick verification (structure only, no data read)"
             echo "  --role=  Override auto-detected role (workstation|server)"
             exit 0
@@ -135,7 +137,18 @@ fi
 OVERALL_EXIT=0
 
 for VERIFY_REPO in "${VERIFY_REPOS[@]}"; do
-    # --- Run integrity check ---
+    if [ "$PRINT_ENV" = true ]; then
+    echo "DISTRO_ID=$DISTRO_ID"
+    echo "DISTRO_VERSION_ID=$DISTRO_VERSION_ID"
+    echo "ROLE=$ROLE"
+    echo "CONFIG_DIR=$CONFIG_DIR"
+    echo "RESTIC_REPOSITORY=$RESTIC_REPOSITORY"
+    echo "RESTIC_REPOSITORY_LOCAL=${RESTIC_REPOSITORY_LOCAL:-}"
+    echo "RESTIC_PASSWORD_FILE=$RESTIC_PASSWORD_FILE"
+    exit 0
+fi
+
+# --- Run integrity check ---
     header "Running repository integrity check: $VERIFY_REPO"
 
     START_TS=$(date +%s)
