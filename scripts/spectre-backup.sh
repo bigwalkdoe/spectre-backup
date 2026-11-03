@@ -256,6 +256,7 @@ JSON_OUTPUT=false
 DEBUG=false
 COUNT_ONLY=false
 COUNT_LOCAL=false
+PRINT_ENV=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -282,6 +283,9 @@ for arg in "$@"; do
             ;;
         --debug|--trace)
             DEBUG=true
+            ;;
+        --env)
+            PRINT_ENV=true
             ;;
         --role=*)
             ROLE="${arg#*=}"
@@ -318,6 +322,7 @@ for arg in "$@"; do
             echo "  --count-local Print snapshot count for the local repository and exit"
             echo "  --password-file=PATH  Override the Restic password file"
             echo "  --role=R     Override auto-detected role (workstation|server)"
+            echo "  --env        Print resolved configuration and exit"
             exit 0
             ;;
         --version)
@@ -367,6 +372,20 @@ if [ "$COUNT_LOCAL" = true ]; then
     export RESTIC_PASSWORD_COMMAND="cat ${RESTIC_PASSWORD_FILE}"
     n=$(timeout 120 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
     echo "$n"
+    exit 0
+fi
+
+if [ "$PRINT_ENV" = true ]; then
+    echo "DISTRO_ID=$DISTRO_ID"
+    echo "DISTRO_VERSION_ID=$DISTRO_VERSION_ID"
+    echo "ROLE=$ROLE"
+    echo "CONFIG_DIR=$CONFIG_DIR"
+    echo "STATE_DIR=$STATE_DIR"
+    echo "RESTIC_REPOSITORY=${RESTIC_REPOSITORY:-}"
+    echo "RESTIC_REPOSITORY_LOCAL=${RESTIC_REPOSITORY_LOCAL:-}"
+    echo "RESTIC_PASSWORD_FILE=$RESTIC_PASSWORD_FILE"
+    echo "INCLUDE_FILE=$INCLUDE_FILE"
+    echo "EXCLUDE_FILE=$EXCLUDE_FILE"
     exit 0
 fi
 
