@@ -241,6 +241,6 @@ fi
 info "Pruning complete."
 
 # --- Notify ---
-if [ "$SEND_NOTIFY" = true ] && [ "$DRY_RUN" = false ] && command -v notify-send &>/dev/null; then
+if [ "$SEND_NOTIFY" = true ] && [ "$DRY_RUN" = false ] && [ "${QUIET:-false}" != true ] && command -v notify-send &>/dev/null; then
     notify-send -u low "spectre-backup" "Pruning complete: $SNAPSHOTS_LEFT snapshots, $REPO_SIZE"
 fi
