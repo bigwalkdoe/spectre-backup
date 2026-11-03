@@ -227,11 +227,15 @@ heal_lock() {
 # ============================================================
 # Health dispatch
 # ============================================================
+NO_PRUNE=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
             health_check "$@"
             exit $?
+            ;;
+        --no-prune)
+            NO_PRUNE=true
             ;;
     esac
 done
@@ -623,7 +627,9 @@ notify "✓ Backup Successful" "Duration: $DURATION_STR | Snapshot: $SNAPSHOT_ID
 # ============================================================
 header "Phase 5: Pruning old snapshots"
 
-if [ -f "$SCRIPT_DIR/spectre-backup-prune.sh" ]; then
+if [ "$NO_PRUNE" = true ]; then
+    info "Pruning skipped (--no-prune)"
+elif [ -f "$SCRIPT_DIR/spectre-backup-prune.sh" ]; then
     info "Running prune script..."
     bash "$SCRIPT_DIR/spectre-backup-prune.sh" --no-notify || warn "Prune completed with warnings"
 else
