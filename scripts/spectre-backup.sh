@@ -271,7 +271,7 @@ if [ "$BACKEND" = "rclone" ]; then
         warn "Create the remote with: rclone config   (n) new remote -> $REMOTE_NAME"
         notify "Backup Degraded" "rclone remote $REMOTE_NAME not defined; local backup still running" "warning"
         REMOTE_AVAILABLE=0
-    elif ! rclone lsd "${REMOTE_NAME}:" >/dev/null 2>&1; then
+    elif ! timeout 60 rclone lsd "${REMOTE_NAME}:" >/dev/null 2>&1; then
         error "rclone remote '$REMOTE_NAME:' is defined but not usable -- offsite leg will be SKIPPED"
         warn "Most often an expired or missing OAuth token. Re-authorise with:"
         warn "    rclone config reconnect ${REMOTE_NAME}:"
