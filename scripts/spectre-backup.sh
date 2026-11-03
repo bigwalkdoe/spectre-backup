@@ -237,6 +237,9 @@ for arg in "$@"; do
         --no-prune)
             NO_PRUNE=true
             ;;
+        --no-notify)
+            NOTIFY_ENABLED="false"
+            ;;
     esac
 done
 
