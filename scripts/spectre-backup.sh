@@ -64,7 +64,7 @@ exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
 
 # Colours
 RED=''; GREEN=''; YELLOW=''; BLUE=''; BOLD=''; NC=''
-if [ -t 1 ]; then
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
     BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 fi
