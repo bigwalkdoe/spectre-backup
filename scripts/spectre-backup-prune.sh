@@ -53,18 +53,21 @@ header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${N
 DRY_RUN=false
 SEND_NOTIFY=true
 QUIET=false
+JSON_OUTPUT=false
 
 for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=true ;;
         --no-notify) SEND_NOTIFY=false ;;
         --quiet) QUIET=true ;;
+        --json) JSON_OUTPUT=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [--dry-run] [--no-notify] [--role=workstation|server]"
             echo ""
             echo "  --dry-run    Preview pruning without deleting"
             echo "  --no-notify  Suppress desktop notifications"
+            echo "  --json       Machine-readable JSON summary"
             echo "  --role=      Override auto-detected role (workstation|server)"
             exit 0
             ;;
@@ -239,6 +242,12 @@ if [ "$PRUNE_FAILED" -ne 0 ]; then
 fi
 
 info "Pruning complete."
+
+if [ "$JSON_OUTPUT" = true ]; then
+    cat <<JSON
+{"status": "$([ $PRUNE_FAILED -eq 0 ] && echo ok || echo failed)", "exit_code": $PRUNE_FAILED, "snapshots_left": ${SNAPSHOTS_LEFT:-0}, "dry_run": $DRY_RUN}
+JSON
+fi
 
 # --- Notify ---
 if [ "$SEND_NOTIFY" = true ] && [ "$DRY_RUN" = false ] && [ "${QUIET:-false}" != true ] && command -v notify-send &>/dev/null; then
