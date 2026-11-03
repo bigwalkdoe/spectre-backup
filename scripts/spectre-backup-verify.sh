@@ -44,12 +44,14 @@ header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${N
 
 FULL_CHECK=false
 QUIET=false
+DEBUG=false
 JSON_OUTPUT=false
 for arg in "$@"; do
     case "$arg" in
         --full|--check-data) FULL_CHECK=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --quiet) QUIET=true ;;
+        --debug) DEBUG=true ;;
         --json) JSON_OUTPUT=true ;;
         --help|-h)
             echo "Usage: $0 [--full] [--role=workstation|server]"
@@ -83,6 +85,8 @@ LOG_FILE="$STATE_DIR/verify-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # --- Pre-flight ---
+if [ "${DEBUG:-false}" = true ]; then set -x; fi
+
 header "spectre-backup - Repository Verification ($DISTRO_ID, role=$ROLE)"
 
 if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then

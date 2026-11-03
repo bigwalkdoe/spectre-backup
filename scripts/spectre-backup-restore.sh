@@ -53,6 +53,7 @@ JUST_LIST=false
 USE_LOCAL=false
 ASSUME_YES=false
 QUIET=false
+DEBUG=false
 RESTORE_TARGET="/"
 VERIFY_FIRST=false
 for arg in "$@"; do
@@ -63,6 +64,7 @@ for arg in "$@"; do
         --local) USE_LOCAL=true ;;
         --yes|-y) ASSUME_YES=true ;;
         --quiet) QUIET=true; ASSUME_YES=true ;;
+        --debug) DEBUG=true ;;
         --target=*) RESTORE_TARGET="${arg#*=}" ;;
         --verify) VERIFY_FIRST=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
@@ -113,6 +115,8 @@ LOG_FILE="$LOG_DIR/restore-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # --- Pre-flight checks ---
+if [ "${DEBUG:-false}" = true ]; then set -x; fi
+
 header "Pre-flight checks ($DISTRO_ID $DISTRO_VERSION_ID, role=$ROLE)"
 
 if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then

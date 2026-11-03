@@ -53,6 +53,7 @@ header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${N
 DRY_RUN=false
 SEND_NOTIFY=true
 QUIET=false
+DEBUG=false
 JSON_OUTPUT=false
 
 for arg in "$@"; do
@@ -60,6 +61,7 @@ for arg in "$@"; do
         --dry-run) DRY_RUN=true ;;
         --no-notify) SEND_NOTIFY=false ;;
         --quiet) QUIET=true ;;
+        --debug) DEBUG=true ;;
         --json) JSON_OUTPUT=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
@@ -81,6 +83,8 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [ "${DEBUG:-false}" = true ]; then set -x; fi
 
 # --- Load config ---
 if [ -f "$CONFIG_DIR/.env" ]; then
