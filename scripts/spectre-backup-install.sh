@@ -20,6 +20,7 @@ ROLE=""
 INSTALL_BIN_ONLY=false
 SKIP_TEST=false
 NO_MIGRATE=false
+INIT_REPO=""
 FORCE_OVERWRITE=false
 QUIET=false
 
@@ -31,6 +32,7 @@ for arg in "$@"; do
         --bin-only) INSTALL_BIN_ONLY=true ;;
         --skip-test) SKIP_TEST=true ;;
         --no-migrate) NO_MIGRATE=true ;;
+        --repo=*) INIT_REPO="${arg#*=}" ;;
         --force) FORCE_OVERWRITE=true ;;
         --quiet) QUIET=true ;;
         --help|-h)
@@ -41,6 +43,7 @@ for arg in "$@"; do
             echo "  --bin-only          Install scripts only, skip config and systemd"
             echo "  --skip-test         Skip the test backup prompt"
             echo "  --no-migrate        Skip legacy install migration"
+            echo "  --repo=URL          Set initial RESTIC_REPOSITORY"
             echo "  --force             Overwrite existing config files"
             echo "  --quiet             Suppress informational output"
             exit 0
@@ -239,6 +242,12 @@ else
     info "Exists:  $INSTALL_CONFIG_DIR/.env (not overwritten)"
 fi
 
+# Honour an explicit initial repository override.
+if [ -n "$INIT_REPO" ] && [ -f "$INSTALL_CONFIG_DIR/.env" ]; then
+    sed -i "s|^RESTIC_REPOSITORY=.*|RESTIC_REPOSITORY=\"$INIT_REPO\"|" "$INSTALL_CONFIG_DIR/.env"
+    info "Set RESTIC_REPOSITORY=$INIT_REPO in $INSTALL_CONFIG_DIR/.env"
+fi
+
 # ============================================================
 # Step 5: Configure rclone
 # ============================================================
@@ -360,6 +369,7 @@ else
     # Honour a repository already declared in .env (e.g. a custom remote or
     # local path) rather than always assuming the default rclone remote.
     REPO="rclone:spectre-backup:"
+    [ -n "$INIT_REPO" ] && REPO="$INIT_REPO"
     if [ -f "$INSTALL_CONFIG_DIR/.env" ]; then
         # shellcheck disable=SC1090
         . "$INSTALL_CONFIG_DIR/.env" 2>/dev/null || true
