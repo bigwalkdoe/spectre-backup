@@ -112,17 +112,25 @@ done < <(find_repos)
 # transient git error cannot cause history to be deleted.
 if [ "$failed" -eq 0 ]; then
     live_names=$(mktemp)
-    find_repos | while IFS= read -r r; do
-        [ -n "$r" ] && slug_for "$r" && printf '.git\n'
-    done > "$live_names"
-    for d in "$DEST"/*.git; do
-        [ -d "$d" ] || continue
-        base=$(basename "$d")
-        if ! grep -qxF "$base" "$live_names"; then
-            printf 'removing stale mirror: %s\n' "$base" >&2
-            rm -rf "$d"
-        fi
-    done
+    live_count=0
+    while IFS= read -r r; do
+        [ -n "$r" ] || continue
+        slug_for "$r"
+        printf '.git\n'
+        live_count=$((live_count + 1))
+    done < <(find_repos) > "$live_names"
+    # Only prune when the source actually yielded repositories. An empty
+    # source tree (or a find failure) must never wipe existing mirrors.
+    if [ "$live_count" -gt 0 ]; then
+        for d in "$DEST"/*.git; do
+            [ -d "$d" ] || continue
+            base=$(basename "$d")
+            if ! grep -qxF "$base" "$live_names"; then
+                printf 'removing stale mirror: %s\n' "$base" >&2
+                rm -rf "$d"
+            fi
+        done
+    fi
     rm -f "$live_names"
 fi
 
