@@ -51,12 +51,14 @@ DRY_RUN=false
 JUST_LIST=false
 
 USE_LOCAL=false
+ASSUME_YES=false
 for arg in "$@"; do
     case "$arg" in
         --list|--snapshots) JUST_LIST=true ;;
         --snapshot=*) RESTORE_SNAPSHOT="${arg#*=}" ;;
         --dry-run) DRY_RUN=true ;;
         --local) USE_LOCAL=true ;;
+        --yes|-y) ASSUME_YES=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [--list] [--snapshot=<id>] [--dry-run] [--role=workstation|server]"
@@ -65,6 +67,7 @@ for arg in "$@"; do
             echo "  --snapshot=<id> Restore specific snapshot (default: latest)"
             echo "  --dry-run      Show what would be restored without doing it"
             echo "  --local        Restore from the local repository (RESTIC_REPOSITORY_LOCAL)"
+            echo "  --yes, -y      Skip the confirmation prompt (non-interactive)"
             echo "  --role=        Override auto-detected role (workstation|server)"
             exit 0
             ;;
@@ -181,10 +184,14 @@ fi
 echo -e "${YELLOW}${BOLD}WARNING:${NC} This will restore files to their original locations."
 echo -e "${YELLOW}Existing files may be overwritten.${NC}"
 echo ""
-read -rp "Continue with restore? [y/N]: " confirm
-if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    info "Restore cancelled"
-    exit 0
+if [ "$ASSUME_YES" != true ]; then
+    read -rp "Continue with restore? [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        info "Restore cancelled"
+        exit 0
+    fi
+else
+    info "Skipping confirmation (--yes)"
 fi
 
 # ============================================================
