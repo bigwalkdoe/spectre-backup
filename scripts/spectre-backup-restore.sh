@@ -52,6 +52,7 @@ JUST_LIST=false
 
 USE_LOCAL=false
 ASSUME_YES=false
+RESTORE_TARGET="/"
 for arg in "$@"; do
     case "$arg" in
         --list|--snapshots) JUST_LIST=true ;;
@@ -59,6 +60,7 @@ for arg in "$@"; do
         --dry-run) DRY_RUN=true ;;
         --local) USE_LOCAL=true ;;
         --yes|-y) ASSUME_YES=true ;;
+        --target=*) RESTORE_TARGET="${arg#*=}" ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [--list] [--snapshot=<id>] [--dry-run] [--role=workstation|server]"
@@ -68,6 +70,7 @@ for arg in "$@"; do
             echo "  --dry-run      Show what would be restored without doing it"
             echo "  --local        Restore from the local repository (RESTIC_REPOSITORY_LOCAL)"
             echo "  --yes, -y      Skip the confirmation prompt (non-interactive)"
+            echo "  --target=DIR   Restore into DIR instead of / (default: /)"
             echo "  --role=        Override auto-detected role (workstation|server)"
             exit 0
             ;;
@@ -164,7 +167,7 @@ header "Restore Plan"
 
 echo -e "  ${BOLD}Snapshot:${NC}     $SNAPSHOT_ID"
 echo -e "  ${BOLD}Repository:${NC}   $RESTIC_REPOSITORY"
-echo -e "  ${BOLD}Restore to:${NC}   / (system root equivalent)"
+echo -e "  ${BOLD}Restore to:${NC}   $RESTORE_TARGET"
 echo -e "  ${BOLD}Distro:${NC}       $DISTRO_ID $DISTRO_VERSION_ID"
 echo -e "  ${BOLD}Role:${NC}         $ROLE"
 echo -e "  ${BOLD}Dry run:${NC}      $DRY_RUN"
@@ -200,7 +203,7 @@ fi
 header "Step 1: Restoring filesystem from snapshot"
 echo "This may take a while depending on repository size..."
 
-restic -r "$RESTIC_REPOSITORY" restore "$SNAPSHOT_ID" --target / 2>&1
+restic -r "$RESTIC_REPOSITORY" restore "$SNAPSHOT_ID" --target "$RESTORE_TARGET" 2>&1
 info "Filesystem restore complete"
 
 # ============================================================
