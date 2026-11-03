@@ -219,6 +219,7 @@ fi
 header "Step 1: Restoring filesystem from snapshot"
 echo "This may take a while depending on repository size..."
 
+mkdir -p "$RESTORE_TARGET"
 restic -r "$RESTIC_REPOSITORY" restore "$SNAPSHOT_ID" --target "$RESTORE_TARGET" 2>&1
 info "Filesystem restore complete"
 
