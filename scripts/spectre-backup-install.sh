@@ -406,18 +406,18 @@ else
         sudo mkdir -p "$SYSTEMD_DIR"
         sudo cp "$PROJECT_DIR/systemd/spectre-backup-system.service" "$SYSTEMD_DIR/spectre-backup.service"
         sudo cp "$PROJECT_DIR/systemd/spectre-backup.timer" "$SYSTEMD_DIR/"
-        sudo systemctl daemon-reload
+        sudo systemctl daemon-reload || true
 
         if systemctl is-enabled spectre-backup.timer &>/dev/null 2>&1; then
             info "Timer already enabled"
         else
-            sudo systemctl enable spectre-backup.timer
+            sudo systemctl enable spectre-backup.timer || true
             info "Timer enabled"
         fi
         if systemctl is-active spectre-backup.timer &>/dev/null 2>&1; then
             info "Timer already active"
         else
-            sudo systemctl start spectre-backup.timer
+            sudo systemctl start spectre-backup.timer || true
             info "Timer started"
         fi
         info "Timer status:"
@@ -428,18 +428,18 @@ else
         mkdir -p "$SYSTEMD_USER_DIR"
         cp "$PROJECT_DIR/systemd/spectre-backup.service" "$SYSTEMD_USER_DIR/"
         cp "$PROJECT_DIR/systemd/spectre-backup.timer" "$SYSTEMD_USER_DIR/"
-        systemctl --user daemon-reload
+        systemctl --user daemon-reload || true
 
         if systemctl --user is-enabled spectre-backup.timer &>/dev/null 2>&1; then
             info "Timer already enabled"
         else
-            systemctl --user enable spectre-backup.timer
+            systemctl --user enable spectre-backup.timer || true
             info "Timer enabled"
         fi
         if systemctl --user is-active spectre-backup.timer &>/dev/null 2>&1; then
             info "Timer already active"
         else
-            systemctl --user start spectre-backup.timer
+            systemctl --user start spectre-backup.timer || true
             info "Timer started"
         fi
         info "Timer status:"
