@@ -19,6 +19,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ROLE=""
 INSTALL_BIN_ONLY=false
 SKIP_TEST=false
+FORCE_OVERWRITE=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -27,6 +28,7 @@ for arg in "$@"; do
         --server) ROLE="server" ;;
         --bin-only) INSTALL_BIN_ONLY=true ;;
         --skip-test) SKIP_TEST=true ;;
+        --force) FORCE_OVERWRITE=true ;;
         --help|-h)
             echo "Usage: $0 [--role=workstation|server] [--bin-only] [--skip-test]"
             echo ""
@@ -34,6 +36,7 @@ for arg in "$@"; do
             echo "  --role=server       Install as a server (system systemd service, no notifications)"
             echo "  --bin-only          Install scripts only, skip config and systemd"
             echo "  --skip-test         Skip the test backup prompt"
+            echo "  --force             Overwrite existing config files"
             exit 0
             ;;
         --version)
@@ -191,7 +194,7 @@ copy_config() {
         return 0
     fi
     if [ -f "$src" ]; then
-        if [ -e "$dest" ] && [ ! "$INSTALL_BIN_ONLY" = true ]; then
+        if [ -e "$dest" ] && [ "$FORCE_OVERWRITE" != true ] && [ ! "$INSTALL_BIN_ONLY" = true ]; then
             info "Exists:  $dest (not overwritten)"
         else
             # Remove existing file or symlink (cp refuses to write through a
@@ -215,7 +218,7 @@ copy_config "include.conf"
 copy_config "exclude.conf"
 copy_config "include-remote.conf"
 
-if [ ! -f "$INSTALL_CONFIG_DIR/.env" ] && [ ! "$INSTALL_BIN_ONLY" = true ]; then
+if { [ ! -f "$INSTALL_CONFIG_DIR/.env" ] || [ "$FORCE_OVERWRITE" = true ]; } && [ ! "$INSTALL_BIN_ONLY" = true ]; then
     if [ "$ROLE" = "server" ]; then
         sudo cp "$PROJECT_DIR/config/.env.example" "$INSTALL_CONFIG_DIR/.env"
         sudo chmod 600 "$INSTALL_CONFIG_DIR/.env"
