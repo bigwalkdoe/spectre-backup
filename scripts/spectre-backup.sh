@@ -77,7 +77,7 @@ header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${N
 notify() {
     local title="$1" msg="$2" urgency="${3:-normal}"
     [ "$NOTIFY_ENABLED" != "true" ] && return 0
-    echo "$title: $msg"
+    [ "${QUIET:-false}" = true ] || echo "$title: $msg"
     if [ "$NOTIFY_DESKTOP" = "true" ] && command -v notify-send &>/dev/null; then
         notify-send -u "$urgency" "$title" "$msg" 2>/dev/null || true
     fi
