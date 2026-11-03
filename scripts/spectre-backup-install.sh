@@ -24,6 +24,7 @@ INIT_REPO=""
 FORCE_OVERWRITE=false
 QUIET=false
 DEBUG=false
+PRINT_ENV=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -49,6 +50,7 @@ for arg in "$@"; do
             echo "  --force             Overwrite existing config files"
             echo "  --quiet             Suppress informational output"
             echo "  --debug             Enable shell tracing (set -x)"
+            echo "  --env               Print resolved configuration and exit"
             exit 0
             ;;
         --version)
@@ -67,6 +69,12 @@ for arg in "$@"; do
 done
 
 # --- Interactive mode ---
+if [ "${PRINT_ENV:-false}" = true ]; then
+    echo "DISTRO_ID=$DISTRO_ID"
+    echo "ROLE=${ROLE:-}"
+    echo "CONFIG_SOURCE=$CONFIG_SOURCE"
+    exit 0
+fi
 if [ "${DEBUG:-false}" = true ]; then set -x; fi
 INTERACTIVE=true
 [ -t 0 ] || INTERACTIVE=false
