@@ -53,6 +53,7 @@ header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${N
 DRY_RUN=false
 SEND_NOTIFY=true
 QUIET=false
+PRINT_ENV=false
 DEBUG=false
 JSON_OUTPUT=false
 
@@ -63,6 +64,7 @@ for arg in "$@"; do
         --quiet) QUIET=true ;;
         --password-file=*) RESTIC_PASSWORD_FILE="${arg#*=}" ;;
         --debug|--trace) DEBUG=true ;;
+        --env) PRINT_ENV=true ;;
         --json) JSON_OUTPUT=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
@@ -70,6 +72,7 @@ for arg in "$@"; do
             echo ""
             echo "  --dry-run    Preview pruning without deleting"
             echo "  --no-notify  Suppress desktop notifications"
+            echo "  --env        Print resolved configuration and exit"
             echo "  --json       Machine-readable JSON summary"
             echo "  --role=      Override auto-detected role (workstation|server)"
             exit 0
@@ -110,6 +113,15 @@ LOG_FILE="$STATE_DIR/cleanup-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # --- Pre-flight ---
+if [ "${PRINT_ENV:-false}" = true ]; then
+    echo "DISTRO_ID=$DISTRO_ID"
+    echo "ROLE=$ROLE"
+    echo "CONFIG_DIR=$CONFIG_DIR"
+    echo "RESTIC_REPOSITORY=${RESTIC_REPOSITORY:-}"
+    echo "RESTIC_REPOSITORY_LOCAL=${RESTIC_REPOSITORY_LOCAL:-}"
+    echo "RESTIC_PASSWORD_FILE=$RESTIC_PASSWORD_FILE"
+    exit 0
+fi
 if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then
     error "Password file not found: $RESTIC_PASSWORD_FILE"
     exit 1

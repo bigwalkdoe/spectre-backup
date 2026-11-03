@@ -53,6 +53,7 @@ JUST_LIST=false
 USE_LOCAL=false
 ASSUME_YES=false
 QUIET=false
+PRINT_ENV=false
 DEBUG=false
 RESTORE_TARGET="/"
 VERIFY_FIRST=false
@@ -66,6 +67,7 @@ for arg in "$@"; do
         --quiet) QUIET=true; ASSUME_YES=true ;;
         --password-file=*) RESTIC_PASSWORD_FILE="${arg#*=}" ;;
         --debug|--trace) DEBUG=true ;;
+        --env) PRINT_ENV=true ;;
         --target=*) RESTORE_TARGET="${arg#*=}" ;;
         --verify) VERIFY_FIRST=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
@@ -78,6 +80,7 @@ for arg in "$@"; do
             echo "  --local        Restore from the local repository (RESTIC_REPOSITORY_LOCAL)"
             echo "  --yes, -y      Skip the confirmation prompt (non-interactive)"
             echo "  --quiet        Suppress informational output (implies --yes)"
+            echo "  --env          Print resolved configuration and exit"
             echo "  --target=DIR   Restore into DIR instead of / (default: /)"
             echo "  --verify       Run restic check before restoring"
             echo "  --role=        Override auto-detected role (workstation|server)"
@@ -116,6 +119,15 @@ LOG_FILE="$LOG_DIR/restore-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # --- Pre-flight checks ---
+if [ "${PRINT_ENV:-false}" = true ]; then
+    echo "DISTRO_ID=$DISTRO_ID"
+    echo "ROLE=$ROLE"
+    echo "CONFIG_DIR=$CONFIG_DIR"
+    echo "RESTIC_REPOSITORY=$RESTIC_REPOSITORY"
+    echo "RESTIC_REPOSITORY_LOCAL=${RESTIC_REPOSITORY_LOCAL:-}"
+    echo "RESTIC_PASSWORD_FILE=$RESTIC_PASSWORD_FILE"
+    exit 0
+fi
 if [ "${DEBUG:-false}" = true ]; then set -x; fi
 
 header "Pre-flight checks ($DISTRO_ID $DISTRO_VERSION_ID, role=$ROLE)"
