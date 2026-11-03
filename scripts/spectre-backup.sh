@@ -228,6 +228,7 @@ heal_lock() {
 # Health dispatch
 # ============================================================
 NO_PRUNE=false
+LIST_SNAPSHOTS=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -240,6 +241,9 @@ for arg in "$@"; do
         --no-notify)
             NOTIFY_ENABLED="false"
             ;;
+        --list|--snapshots)
+            LIST_SNAPSHOTS=true
+            ;;
         --help|-h)
             echo "Usage: $0 [--health [--json]] [--no-prune] [--no-notify]"
             echo ""
@@ -247,6 +251,7 @@ for arg in "$@"; do
             echo "  --health --json  Machine-readable JSON output"
             echo "  --no-prune   Skip post-backup pruning"
             echo "  --no-notify  Suppress desktop notifications"
+            echo "  --list       List snapshots in the offsite repository"
             exit 0
             ;;
         --version)
@@ -259,6 +264,14 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# --- List snapshots and exit ---
+if [ "$LIST_SNAPSHOTS" = true ]; then
+    export RESTIC_PASSWORD_COMMAND="cat ${RESTIC_PASSWORD_FILE}"
+    echo "Repository: ${RESTIC_REPOSITORY}"
+    restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null         | jq -r 'sort_by(.time) | reverse | .[] | "\(.short_id)  \(.time)  [\(.tags // [] | join(","))]"'
+    exit 0
+fi
 
 header "Pre-flight checks ($DISTRO_ID $DISTRO_VERSION_ID, role=$ROLE)"
 
