@@ -178,7 +178,7 @@ if [ "$FULL_CHECK" = true ]; then
     echo ""
     info "Monthly full verification completed"
     if [ $OVERALL_EXIT -eq 0 ]; then
-        if command -v notify-send &>/dev/null; then
+        if [ "${QUIET:-false}" != true ] && command -v notify-send &>/dev/null; then
             notify-send -u normal "spectre-backup" "Monthly verification passed (${DURATION}s)"
         fi
     fi
