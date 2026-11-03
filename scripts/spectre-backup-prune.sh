@@ -53,6 +53,7 @@ header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${N
 DRY_RUN=false
 SEND_NOTIFY=true
 QUIET=false
+NO_COLOR=false
 PRINT_ENV=false
 DEBUG=false
 JSON_OUTPUT=false
@@ -64,6 +65,7 @@ for arg in "$@"; do
         --quiet) QUIET=true ;;
         --password-file=*) RESTIC_PASSWORD_FILE="${arg#*=}" ;;
         --debug|--trace) DEBUG=true ;;
+        --no-color) NO_COLOR=true ;;
         --env) PRINT_ENV=true ;;
         --json) JSON_OUTPUT=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
@@ -89,6 +91,8 @@ for arg in "$@"; do
 done
 
 if [ "${DEBUG:-false}" = true ]; then set -x; fi
+
+if [ "${NO_COLOR:-false}" = true ]; then RED=""; GREEN=""; YELLOW=""; BLUE=""; BOLD=""; NC=""; fi
 
 # --- Load config ---
 if [ -f "$CONFIG_DIR/.env" ]; then

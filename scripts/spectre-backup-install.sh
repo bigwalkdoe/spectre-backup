@@ -23,6 +23,7 @@ NO_MIGRATE=false
 INIT_REPO=""
 FORCE_OVERWRITE=false
 QUIET=false
+NO_COLOR=false
 DEBUG=false
 PRINT_ENV=false
 
@@ -38,6 +39,7 @@ for arg in "$@"; do
         --force) FORCE_OVERWRITE=true ;;
         --quiet) QUIET=true ;;
         --debug|--trace) DEBUG=true ;;
+        --no-color) NO_COLOR=true ;;
         --help|-h)
             echo "Usage: $0 [--role=workstation|server] [--bin-only] [--skip-test]"
             echo ""
@@ -50,6 +52,7 @@ for arg in "$@"; do
             echo "  --force             Overwrite existing config files"
             echo "  --quiet             Suppress informational output"
             echo "  --debug             Enable shell tracing (set -x)"
+            echo "  --no-color          Disable colored output"
             echo "  --env               Print resolved configuration and exit"
             exit 0
             ;;
@@ -67,6 +70,8 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [ "${NO_COLOR:-false}" = true ]; then RED=""; GREEN=""; YELLOW=""; BLUE=""; BOLD=""; NC=""; fi
 
 # --- Interactive mode ---
 if [ "${PRINT_ENV:-false}" = true ]; then

@@ -44,6 +44,7 @@ header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${N
 
 FULL_CHECK=false
 QUIET=false
+NO_COLOR=false
 DEBUG=false
 JSON_OUTPUT=false
 for arg in "$@"; do
@@ -53,6 +54,7 @@ for arg in "$@"; do
         --quiet) QUIET=true ;;
         --password-file=*) RESTIC_PASSWORD_FILE="${arg#*=}" ;;
         --debug|--trace) DEBUG=true ;;
+        --no-color) NO_COLOR=true ;;
         --json) JSON_OUTPUT=true ;;
         --env) PRINT_ENV=true ;;
         --help|-h)
@@ -75,6 +77,8 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [ "${NO_COLOR:-false}" = true ]; then RED=""; GREEN=""; YELLOW=""; BLUE=""; BOLD=""; NC=""; fi
 
 # --- Load config ---
 if [ -f "$CONFIG_DIR/.env" ]; then

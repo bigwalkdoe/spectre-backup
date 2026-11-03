@@ -53,6 +53,7 @@ JUST_LIST=false
 USE_LOCAL=false
 ASSUME_YES=false
 QUIET=false
+NO_COLOR=false
 PRINT_ENV=false
 DEBUG=false
 RESTORE_TARGET="/"
@@ -67,6 +68,7 @@ for arg in "$@"; do
         --quiet) QUIET=true; ASSUME_YES=true ;;
         --password-file=*) RESTIC_PASSWORD_FILE="${arg#*=}" ;;
         --debug|--trace) DEBUG=true ;;
+        --no-color) NO_COLOR=true ;;
         --env) PRINT_ENV=true ;;
         --target=*) RESTORE_TARGET="${arg#*=}" ;;
         --verify) VERIFY_FIRST=true ;;
@@ -96,6 +98,8 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [ "${NO_COLOR:-false}" = true ]; then RED=""; GREEN=""; YELLOW=""; BLUE=""; BOLD=""; NC=""; fi
 
 # --- Load config ---
 if [ -f "$CONFIG_DIR/.env" ]; then
