@@ -249,6 +249,14 @@ for arg in "$@"; do
             echo "  --no-notify  Suppress desktop notifications"
             exit 0
             ;;
+        --version)
+            if git -C "$PROJECT_DIR" describe --tags --always >/dev/null 2>&1; then
+                echo "spectre-backup $(git -C "$PROJECT_DIR" describe --tags --always 2>/dev/null)"
+            else
+                echo "spectre-backup (dev)"
+            fi
+            exit 0
+            ;;
     esac
 done
 
