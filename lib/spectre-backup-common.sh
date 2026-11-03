@@ -5,8 +5,10 @@
 # ============================================================
 
 # --- Colours (only when attached to a terminal) ---
+# Respect the NO_COLOR standard (https://no-color.org) and an explicit
+# NO_COLOR=true/1/yes.
 RED=''; GREEN=''; YELLOW=''; BLUE=''; BOLD=''; NC=''
-if [ -t 1 ]; then
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
     BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 fi
