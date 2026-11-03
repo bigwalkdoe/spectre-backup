@@ -254,6 +254,7 @@ LIST_LOCAL=false
 QUIET=false
 JSON_OUTPUT=false
 DEBUG=false
+COUNT_ONLY=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -281,6 +282,9 @@ for arg in "$@"; do
         --debug)
             DEBUG=true
             ;;
+        --count)
+            COUNT_ONLY=true
+            ;;
         --help|-h)
             echo "Usage: $0 [--health [--json]] [--no-prune] [--no-notify]"
             echo ""
@@ -293,6 +297,7 @@ for arg in "$@"; do
             echo "  --quiet      Suppress informational output"
             echo "  --json       Print a JSON summary at the end"
             echo "  --debug      Enable shell tracing (set -x)"
+            echo "  --count      Print snapshot count for the offsite repository and exit"
             exit 0
             ;;
         --version)
@@ -326,6 +331,13 @@ if [ "$LIST_LOCAL" = true ]; then
 fi
 
 if [ "$DEBUG" = true ]; then set -x; fi
+
+if [ "$COUNT_ONLY" = true ]; then
+    export RESTIC_PASSWORD_COMMAND="cat ${RESTIC_PASSWORD_FILE}"
+    n=$(timeout 120 restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
+    echo "$n"
+    exit 0
+fi
 
 header "Pre-flight checks ($DISTRO_ID $DISTRO_VERSION_ID, role=$ROLE)"
 
