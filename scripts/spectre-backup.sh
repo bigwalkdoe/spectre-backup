@@ -282,7 +282,7 @@ done
 if [ "$LIST_SNAPSHOTS" = true ]; then
     export RESTIC_PASSWORD_COMMAND="cat ${RESTIC_PASSWORD_FILE}"
     echo "Repository: ${RESTIC_REPOSITORY}"
-    restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null         | jq -r 'sort_by(.time) | reverse | .[] | "\(.short_id)  \(.time)  [\(.tags // [] | join(","))]"'
+    timeout 120 restic -r "$RESTIC_REPOSITORY" snapshots --json 2>/dev/null         | jq -r 'sort_by(.time) | reverse | .[] | "\(.short_id)  \(.time)  [\(.tags // [] | join(","))]"'
     exit 0
 fi
 
@@ -293,7 +293,7 @@ if [ "$LIST_LOCAL" = true ]; then
     fi
     export RESTIC_PASSWORD_COMMAND="cat ${RESTIC_PASSWORD_FILE}"
     echo "Repository: ${RESTIC_REPOSITORY_LOCAL}"
-    restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq -r 'sort_by(.time) | reverse | .[] | "\(.short_id)  \(.time)  [\(.tags // [] | join(","))]"'
+    timeout 120 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq -r 'sort_by(.time) | reverse | .[] | "\(.short_id)  \(.time)  [\(.tags // [] | join(","))]"'
     exit 0
 fi
 
