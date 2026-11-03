@@ -189,7 +189,7 @@ health_check() {
   "local": {"count": $local_count, "newest_iso": "$local_newest_iso", "age_hours": $local_age_h, "status": "$local_status"},
   "offsite": {"count": $off_count, "newest_iso": "$off_newest_iso", "age_hours": $off_age_h, "status": "$off_status"},
   "disk_free_g": $local_free_g, "disk_status": "$disk_status",
-  "quota_used_pct": "${used_pct:-null}", "quota_status": "$quota_status",
+  "quota_used_pct": $( [ -n "$used_pct" ] && echo "$used_pct" || echo null ), "quota_status": "$quota_status",
   "locks_status": "$locks_status"
 }
 JSON
