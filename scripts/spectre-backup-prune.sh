@@ -61,6 +61,7 @@ for arg in "$@"; do
         --dry-run) DRY_RUN=true ;;
         --no-notify) SEND_NOTIFY=false ;;
         --quiet) QUIET=true ;;
+        --password-file=*) RESTIC_PASSWORD_FILE="${arg#*=}" ;;
         --debug|--trace) DEBUG=true ;;
         --json) JSON_OUTPUT=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;

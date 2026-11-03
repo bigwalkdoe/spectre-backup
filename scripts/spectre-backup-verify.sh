@@ -51,6 +51,7 @@ for arg in "$@"; do
         --full|--check-data) FULL_CHECK=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --quiet) QUIET=true ;;
+        --password-file=*) RESTIC_PASSWORD_FILE="${arg#*=}" ;;
         --debug|--trace) DEBUG=true ;;
         --json) JSON_OUTPUT=true ;;
         --help|-h)
