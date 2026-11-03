@@ -240,6 +240,15 @@ for arg in "$@"; do
         --no-notify)
             NOTIFY_ENABLED="false"
             ;;
+        --help|-h)
+            echo "Usage: $0 [--health [--json]] [--no-prune] [--no-notify]"
+            echo ""
+            echo "  --health     Run health check (exit 0=ok,1=degraded,2=failed)"
+            echo "  --health --json  Machine-readable JSON output"
+            echo "  --no-prune   Skip post-backup pruning"
+            echo "  --no-notify  Suppress desktop notifications"
+            exit 0
+            ;;
     esac
 done
 
