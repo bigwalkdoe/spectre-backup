@@ -23,13 +23,25 @@
 # Safe to run repeatedly: existing mirrors are fetched, not re-cloned.
 set -euo pipefail
 
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_ROOT="${GIT_MIRROR_SRC:-$HOME/dev}"
 DEST="${GIT_MIRROR_DEST:-$HOME/.git-mirror}"
 
+QUIET=false
+DEBUG=false
 while [ $# -gt 0 ]; do
     case "$1" in
         --src)  SRC_ROOT="$2"; shift 2 ;;
         --dest) DEST="$2";    shift 2 ;;
+        --quiet) QUIET=true; shift ;;
+        --debug|--trace) DEBUG=true; shift ;;
+        --version)
+            if git -C "$PROJECT_DIR" describe --tags --always >/dev/null 2>&1; then
+                echo "git-mirror $(git -C "$PROJECT_DIR" describe --tags --always 2>/dev/null)"
+            else
+                echo "git-mirror (dev)"
+            fi
+            exit 0 ;;
         -h|--help)
             sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
@@ -38,6 +50,7 @@ while [ $# -gt 0 ]; do
             exit 2 ;;
     esac
 done
+if [ "$DEBUG" = true ]; then set -x; fi
 
 if [ ! -d "$SRC_ROOT" ]; then
     printf 'git-mirror: no source dir at %s — nothing to mirror\n' "$SRC_ROOT" >&2
