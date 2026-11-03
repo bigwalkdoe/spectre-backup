@@ -89,6 +89,22 @@ Workstations install config to `~/.config/spectre-backup/`. Servers install to `
 
 Config is selected by role and distro: `config/<role>/<distro>/`. Falls back to `config/defaults/` when no match exists.
 
+## Common flags
+
+All scripts accept `--help`, `--version`, `--quiet`, `--debug` (alias `--trace`),
+and `--env` (print resolved configuration).
+
+- `spectre-backup.sh`: `--health [--json]`, `--no-prune`, `--no-notify`,
+  `--list`/`--list-local`, `--count`/`--count-local`, `--password-file=PATH`,
+  `--role=R`, `--json`, `--trace`.
+- `spectre-backup-restore.sh`: `--list`, `--snapshot=<id>`, `--dry-run`,
+  `--local`, `--yes`/`-y`, `--target=DIR`, `--verify`, `--password-file=PATH`.
+- `spectre-backup-verify.sh`: `--full`, `--json`, `--password-file=PATH`.
+- `spectre-backup-prune.sh`: `--dry-run`, `--no-notify`, `--json`,
+  `--password-file=PATH`.
+- `spectre-backup-install.sh`: `--role=`, `--bin-only`, `--skip-test`,
+  `--no-migrate`, `--force`, `--repo=URL`, `--quiet`, `--debug`.
+
 ## Usage
 
 ### Manual backup
