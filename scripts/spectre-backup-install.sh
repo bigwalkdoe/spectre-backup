@@ -36,7 +36,7 @@ for arg in "$@"; do
         --repo=*) INIT_REPO="${arg#*=}" ;;
         --force) FORCE_OVERWRITE=true ;;
         --quiet) QUIET=true ;;
-        --debug) DEBUG=true ;;
+        --debug|--trace) DEBUG=true ;;
         --help|-h)
             echo "Usage: $0 [--role=workstation|server] [--bin-only] [--skip-test]"
             echo ""

@@ -64,7 +64,7 @@ for arg in "$@"; do
         --local) USE_LOCAL=true ;;
         --yes|-y) ASSUME_YES=true ;;
         --quiet) QUIET=true; ASSUME_YES=true ;;
-        --debug) DEBUG=true ;;
+        --debug|--trace) DEBUG=true ;;
         --target=*) RESTORE_TARGET="${arg#*=}" ;;
         --verify) VERIFY_FIRST=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;

@@ -61,7 +61,7 @@ for arg in "$@"; do
         --dry-run) DRY_RUN=true ;;
         --no-notify) SEND_NOTIFY=false ;;
         --quiet) QUIET=true ;;
-        --debug) DEBUG=true ;;
+        --debug|--trace) DEBUG=true ;;
         --json) JSON_OUTPUT=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)

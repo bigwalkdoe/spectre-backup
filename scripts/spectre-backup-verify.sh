@@ -51,7 +51,7 @@ for arg in "$@"; do
         --full|--check-data) FULL_CHECK=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --quiet) QUIET=true ;;
-        --debug) DEBUG=true ;;
+        --debug|--trace) DEBUG=true ;;
         --json) JSON_OUTPUT=true ;;
         --help|-h)
             echo "Usage: $0 [--full] [--role=workstation|server]"
