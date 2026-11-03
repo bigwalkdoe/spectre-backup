@@ -45,3 +45,17 @@ jobs:
         run: dnf install -y jq restic rclone ShellCheck findutils
       - name: Run test suite
         run: ./tests/run-tests.sh
+
+  server-smoke:
+    name: Server install smoke (Fedora container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: fedora:latest
+    steps:
+      - name: Prepare container
+        run: dnf install -y git ca-certificates
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: dnf install -y jq restic rclone ShellCheck findutils systemd sudo
+      - name: Run server install smoke test
+        run: ./tests/server-install-smoke.sh
