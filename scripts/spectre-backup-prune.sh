@@ -45,18 +45,20 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
-info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
+info()  { [ "${QUIET:-false}" = true ] || echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-header(){ echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
+header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
 
 DRY_RUN=false
 SEND_NOTIFY=true
+QUIET=false
 
 for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=true ;;
         --no-notify) SEND_NOTIFY=false ;;
+        --quiet) QUIET=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [--dry-run] [--no-notify] [--role=workstation|server]"

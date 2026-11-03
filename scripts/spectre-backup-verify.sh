@@ -37,16 +37,18 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
-info()  { echo -e "$(date '+%H:%M:%S') ${GREEN}[INFO]${NC}  $*"; }
+info()  { [ "${QUIET:-false}" = true ] || echo -e "$(date '+%H:%M:%S') ${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "$(date '+%H:%M:%S') ${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${NC} $*" >&2; }
-header(){ echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
+header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
 
 FULL_CHECK=false
+QUIET=false
 for arg in "$@"; do
     case "$arg" in
         --full|--check-data) FULL_CHECK=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
+        --quiet) QUIET=true ;;
         --help|-h)
             echo "Usage: $0 [--full] [--role=workstation|server]"
             echo ""

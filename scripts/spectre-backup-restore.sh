@@ -38,10 +38,10 @@ RESTIC_PASSWORD_FILE="${CONFIG_DIR}/password"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
-info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
+info()  { [ "${QUIET:-false}" = true ] || echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-header(){ echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
+header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
 
 check_cmd() { command -v "$1" &>/dev/null; }
 
@@ -52,6 +52,7 @@ JUST_LIST=false
 
 USE_LOCAL=false
 ASSUME_YES=false
+QUIET=false
 RESTORE_TARGET="/"
 VERIFY_FIRST=false
 for arg in "$@"; do
@@ -61,6 +62,7 @@ for arg in "$@"; do
         --dry-run) DRY_RUN=true ;;
         --local) USE_LOCAL=true ;;
         --yes|-y) ASSUME_YES=true ;;
+        --quiet) QUIET=true; ASSUME_YES=true ;;
         --target=*) RESTORE_TARGET="${arg#*=}" ;;
         --verify) VERIFY_FIRST=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
@@ -72,6 +74,7 @@ for arg in "$@"; do
             echo "  --dry-run      Show what would be restored without doing it"
             echo "  --local        Restore from the local repository (RESTIC_REPOSITORY_LOCAL)"
             echo "  --yes, -y      Skip the confirmation prompt (non-interactive)"
+            echo "  --quiet        Suppress informational output (implies --yes)"
             echo "  --target=DIR   Restore into DIR instead of / (default: /)"
             echo "  --verify       Run restic check before restoring"
             echo "  --role=        Override auto-detected role (workstation|server)"
