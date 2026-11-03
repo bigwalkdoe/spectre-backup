@@ -83,7 +83,11 @@ install_packages() {
     info "Installing: ${missing[*]}"
     $PKG_REFRESH >/dev/null 2>&1 || true
     # shellcheck disable=SC2086
-    sudo $PKG_INSTALL "${missing[@]}"
+    if [ "$(id -u)" -eq 0 ]; then
+        $PKG_INSTALL "${missing[@]}"
+    else
+        sudo $PKG_INSTALL "${missing[@]}"
+    fi
 }
 
 check_cmd() { command -v "$1" &>/dev/null; }
