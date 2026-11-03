@@ -69,10 +69,10 @@ if [ -t 1 ]; then
     BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 fi
 
-info()  { echo -e "$(date '+%H:%M:%S') ${GREEN}[INFO]${NC}  $*"; }
-warn()  { echo -e "$(date '+%H:%M:%S') ${YELLOW}[WARN]${NC}  $*"; }
+info()  { [ "${QUIET:-false}" = true ] || echo -e "$(date '+%H:%M:%S') ${GREEN}[INFO]${NC}  $*"; }
+warn()  { [ "${QUIET:-false}" = true ] || echo -e "$(date '+%H:%M:%S') ${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${NC} $*" >&2; }
-header(){ echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
+header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
 
 notify() {
     local title="$1" msg="$2" urgency="${3:-normal}"
@@ -251,6 +251,7 @@ heal_lock() {
 NO_PRUNE=false
 LIST_SNAPSHOTS=false
 LIST_LOCAL=false
+QUIET=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -269,6 +270,9 @@ for arg in "$@"; do
         --list-local)
             LIST_LOCAL=true
             ;;
+        --quiet)
+            QUIET=true
+            ;;
         --help|-h)
             echo "Usage: $0 [--health [--json]] [--no-prune] [--no-notify]"
             echo ""
@@ -278,6 +282,7 @@ for arg in "$@"; do
             echo "  --no-notify  Suppress desktop notifications"
             echo "  --list       List snapshots in the offsite repository"
             echo "  --list-local List snapshots in the local repository"
+            echo "  --quiet      Suppress informational output"
             exit 0
             ;;
         --version)
