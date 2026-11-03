@@ -20,6 +20,7 @@ ROLE=""
 INSTALL_BIN_ONLY=false
 SKIP_TEST=false
 FORCE_OVERWRITE=false
+QUIET=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -29,6 +30,7 @@ for arg in "$@"; do
         --bin-only) INSTALL_BIN_ONLY=true ;;
         --skip-test) SKIP_TEST=true ;;
         --force) FORCE_OVERWRITE=true ;;
+        --quiet) QUIET=true ;;
         --help|-h)
             echo "Usage: $0 [--role=workstation|server] [--bin-only] [--skip-test]"
             echo ""
@@ -37,6 +39,7 @@ for arg in "$@"; do
             echo "  --bin-only          Install scripts only, skip config and systemd"
             echo "  --skip-test         Skip the test backup prompt"
             echo "  --force             Overwrite existing config files"
+            echo "  --quiet             Suppress informational output"
             exit 0
             ;;
         --version)

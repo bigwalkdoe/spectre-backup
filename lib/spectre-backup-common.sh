@@ -11,10 +11,10 @@ if [ -t 1 ]; then
     BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 fi
 
-info()  { echo -e "$(date '+%H:%M:%S') ${GREEN}[INFO]${NC}  $*"; }
-warn()  { echo -e "$(date '+%H:%M:%S') ${YELLOW}[WARN]${NC}  $*"; }
+info()  { [ "${QUIET:-false}" = true ] || echo -e "$(date '+%H:%M:%S') ${GREEN}[INFO]${NC}  $*"; }
+warn()  { [ "${QUIET:-false}" = true ] || echo -e "$(date '+%H:%M:%S') ${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${NC} $*" >&2; }
-header(){ echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
+header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${NC}\n"; }
 
 # --- Detect Linux distribution ---
 # Sets: DISTRO_ID, DISTRO_ID_LIKE, DISTRO_VERSION_ID, PKG_MANAGER, PKG_INSTALL, PKG_REFRESH
