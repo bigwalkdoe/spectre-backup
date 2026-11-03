@@ -857,6 +857,14 @@ for script in spectre-backup.sh spectre-backup-restore.sh spectre-backup-verify.
         echo "  FAIL: $script --help non-zero"
         FAIL=$((FAIL + 1))
     fi
+    TOTAL=$((TOTAL + 1))
+    if "$PROJECT_DIR/scripts/$script" --version >/dev/null 2>&1; then
+        echo "  PASS: $script --version exits 0"
+        PASS=$((PASS + 1))
+    else
+        echo "  FAIL: $script --version non-zero"
+        FAIL=$((FAIL + 1))
+    fi
 done
 
 # Restore --local without config should fail gracefully (not crash)
