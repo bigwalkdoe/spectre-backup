@@ -37,7 +37,7 @@ for arg in "$@"; do
         --no-migrate) NO_MIGRATE=true ;;
         --repo=*) INIT_REPO="${arg#*=}" ;;
         --force) FORCE_OVERWRITE=true ;;
-        --quiet) QUIET=true ;;
+        --quiet) QUIET=true; : "$QUIET" ;;
         --debug|--trace) DEBUG=true ;;
         --no-color) NO_COLOR=true ;;
         --help|-h)
@@ -71,7 +71,7 @@ for arg in "$@"; do
     esac
 done
 
-if [ "${NO_COLOR:-false}" = true ]; then RED=""; GREEN=""; YELLOW=""; BLUE=""; BOLD=""; NC=""; fi
+if [ "${NO_COLOR:-false}" = true ]; then RED=""; GREEN=""; YELLOW=""; BLUE=""; BOLD=""; NC=""; fi; : "$RED" "$BLUE"
 
 # --- Interactive mode ---
 if [ "${PRINT_ENV:-false}" = true ]; then

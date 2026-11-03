@@ -141,13 +141,11 @@ if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then
     exit 1
 fi
 
-for cmd in restic; do
-    if ! check_cmd "$cmd"; then
-        error "Required command not found: $cmd"
-        echo "Install: sudo $PKG_MANAGER install -y $cmd"
-        exit 1
-    fi
-done
+if ! check_cmd restic; then
+    error "Required command not found: restic"
+    echo "Install: sudo $PKG_MANAGER install -y restic"
+    exit 1
+fi
 # rclone is only required for rclone-backed repositories.
 if [[ "$RESTIC_REPOSITORY" == rclone:* ]]; then
     if ! check_cmd rclone; then
