@@ -53,6 +53,7 @@ JUST_LIST=false
 USE_LOCAL=false
 ASSUME_YES=false
 RESTORE_TARGET="/"
+VERIFY_FIRST=false
 for arg in "$@"; do
     case "$arg" in
         --list|--snapshots) JUST_LIST=true ;;
@@ -61,6 +62,7 @@ for arg in "$@"; do
         --local) USE_LOCAL=true ;;
         --yes|-y) ASSUME_YES=true ;;
         --target=*) RESTORE_TARGET="${arg#*=}" ;;
+        --verify) VERIFY_FIRST=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [--list] [--snapshot=<id>] [--dry-run] [--role=workstation|server]"
@@ -71,6 +73,7 @@ for arg in "$@"; do
             echo "  --local        Restore from the local repository (RESTIC_REPOSITORY_LOCAL)"
             echo "  --yes, -y      Skip the confirmation prompt (non-interactive)"
             echo "  --target=DIR   Restore into DIR instead of / (default: /)"
+            echo "  --verify       Run restic check before restoring"
             echo "  --role=        Override auto-detected role (workstation|server)"
             exit 0
             ;;
@@ -195,6 +198,19 @@ if [ "$ASSUME_YES" != true ]; then
     fi
 else
     info "Skipping confirmation (--yes)"
+fi
+
+# ============================================================
+# Optional pre-restore integrity check
+# ============================================================
+if [ "$VERIFY_FIRST" = true ]; then
+    header "Pre-restore repository verification"
+    if restic -r "$RESTIC_REPOSITORY" check 2>&1; then
+        info "Repository integrity check passed"
+    else
+        error "Repository integrity check FAILED - aborting restore"
+        exit 1
+    fi
 fi
 
 # ============================================================
