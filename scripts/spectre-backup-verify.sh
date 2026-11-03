@@ -107,57 +107,71 @@ header "Repository statistics"
 # restore-size mode walks every snapshot's file trees (minutes on big repos).
 restic -r "$RESTIC_REPOSITORY" stats --mode raw-data 2>/dev/null || warn "Could not retrieve repository stats"
 
-# --- Run integrity check ---
-header "Running repository integrity check"
-
-START_TS=$(date +%s)
-
-if [ "$FULL_CHECK" = true ]; then
-    set +e
-    restic -r "$RESTIC_REPOSITORY" check --read-data 2>&1
-    CHECK_EXIT=$?
-    set -e
-else
-    set +e
-    restic -r "$RESTIC_REPOSITORY" check 2>&1
-    CHECK_EXIT=$?
-    set -e
+# --- Repositories to verify (offsite + local when configured) ---
+VERIFY_REPOS=()
+[ -n "${RESTIC_REPOSITORY:-}" ] && VERIFY_REPOS+=("$RESTIC_REPOSITORY")
+if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ] && [ "${RESTIC_REPOSITORY_LOCAL}" != "${RESTIC_REPOSITORY}" ]; then
+    VERIFY_REPOS+=("$RESTIC_REPOSITORY_LOCAL")
 fi
 
-END_TS=$(date +%s)
-DURATION=$((END_TS - START_TS))
+OVERALL_EXIT=0
 
-# --- Report ---
-header "Verification Report"
+for VERIFY_REPO in "${VERIFY_REPOS[@]}"; do
+    # --- Run integrity check ---
+    header "Running repository integrity check: $VERIFY_REPO"
 
-if [ $CHECK_EXIT -eq 0 ]; then
-    echo -e "  ${GREEN}${BOLD}✓ Integrity check passed${NC}"
-    echo -e "  ${BOLD}Distro:${NC}     $DISTRO_ID $DISTRO_VERSION_ID"
-    echo -e "  ${BOLD}Role:${NC}       $ROLE"
-    echo -e "  ${BOLD}Duration:${NC}   $DURATION seconds"
-    echo -e "  ${BOLD}Snapshots:${NC}  $SNAPSHOT_COUNT"
-    echo -e "  ${BOLD}Log file:${NC}   $LOG_FILE"
-    echo ""
-    info "Repository is healthy"
-else
-    echo -e "  ${RED}${BOLD}✗ Integrity check FAILED${NC}"
-    echo -e "  ${BOLD}Duration:${NC}   $DURATION seconds"
-    echo -e "  ${BOLD}Log file:${NC}   $LOG_FILE"
-    echo ""
-    error "Repository corruption detected!"
-    error "Check the log file for details: $LOG_FILE"
-    error "Consider restoring from a known-good snapshot."
-fi
+    START_TS=$(date +%s)
+
+    if [ "$FULL_CHECK" = true ]; then
+        set +e
+        restic -r "$VERIFY_REPO" check --read-data 2>&1
+        CHECK_EXIT=$?
+        set -e
+    else
+        set +e
+        restic -r "$VERIFY_REPO" check 2>&1
+        CHECK_EXIT=$?
+        set -e
+    fi
+
+    END_TS=$(date +%s)
+    DURATION=$((END_TS - START_TS))
+
+    REPO_SNAPSHOTS=$(restic -r "$VERIFY_REPO" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
+
+    # --- Report ---
+    header "Verification Report: $VERIFY_REPO"
+
+    if [ $CHECK_EXIT -eq 0 ]; then
+        echo -e "  ${GREEN}${BOLD}✓ Integrity check passed${NC}"
+        echo -e "  ${BOLD}Distro:${NC}     $DISTRO_ID $DISTRO_VERSION_ID"
+        echo -e "  ${BOLD}Role:${NC}       $ROLE"
+        echo -e "  ${BOLD}Duration:${NC}   $DURATION seconds"
+        echo -e "  ${BOLD}Snapshots:${NC}  $REPO_SNAPSHOTS"
+        echo -e "  ${BOLD}Log file:${NC}   $LOG_FILE"
+        echo ""
+        info "Repository is healthy: $VERIFY_REPO"
+    else
+        echo -e "  ${RED}${BOLD}✗ Integrity check FAILED${NC}"
+        echo -e "  ${BOLD}Duration:${NC}   $DURATION seconds"
+        echo -e "  ${BOLD}Log file:${NC}   $LOG_FILE"
+        echo ""
+        error "Repository corruption detected: $VERIFY_REPO"
+        error "Check the log file for details: $LOG_FILE"
+        error "Consider restoring from a known-good snapshot."
+        OVERALL_EXIT=1
+    fi
+done
 
 # --- Monthly check notification ---
 if [ "$FULL_CHECK" = true ]; then
     echo ""
     info "Monthly full verification completed"
-    if [ $CHECK_EXIT -eq 0 ]; then
+    if [ $OVERALL_EXIT -eq 0 ]; then
         if command -v notify-send &>/dev/null; then
-            notify-send -u normal "spectre-backup" "Monthly verification passed ($SNAPSHOT_COUNT snapshots, ${DURATION}s)"
+            notify-send -u normal "spectre-backup" "Monthly verification passed (${DURATION}s)"
         fi
     fi
 fi
 
-exit $CHECK_EXIT
+exit $OVERALL_EXIT
