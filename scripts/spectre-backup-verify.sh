@@ -44,15 +44,18 @@ header(){ [ "${QUIET:-false}" = true ] || echo -e "\n${BLUE}${BOLD}=== $* ===${N
 
 FULL_CHECK=false
 QUIET=false
+JSON_OUTPUT=false
 for arg in "$@"; do
     case "$arg" in
         --full|--check-data) FULL_CHECK=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --quiet) QUIET=true ;;
+        --json) JSON_OUTPUT=true ;;
         --help|-h)
             echo "Usage: $0 [--full] [--role=workstation|server]"
             echo ""
             echo "  --full   Full verification (reads all data, checks pack files)"
+            echo "  --json   Machine-readable JSON summary"
             echo "  (default) Quick verification (structure only, no data read)"
             echo "  --role=  Override auto-detected role (workstation|server)"
             exit 0
@@ -182,6 +185,12 @@ if [ "$FULL_CHECK" = true ]; then
             notify-send -u normal "spectre-backup" "Monthly verification passed (${DURATION}s)"
         fi
     fi
+fi
+
+if [ "$JSON_OUTPUT" = true ]; then
+    cat <<JSON
+{"status": "$([ $OVERALL_EXIT -eq 0 ] && echo ok || echo failed)", "exit_code": $OVERALL_EXIT, "snapshots": ${REPO_SNAPSHOTS:-0}, "full": $FULL_CHECK}
+JSON
 fi
 
 exit $OVERALL_EXIT
