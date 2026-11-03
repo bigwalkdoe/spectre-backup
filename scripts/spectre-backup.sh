@@ -257,6 +257,7 @@ DEBUG=false
 COUNT_ONLY=false
 COUNT_LOCAL=false
 PRINT_ENV=false
+NO_COLOR=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -286,6 +287,9 @@ for arg in "$@"; do
             ;;
         --env)
             PRINT_ENV=true
+            ;;
+        --no-color)
+            NO_COLOR=true
             ;;
         --role=*)
             ROLE="${arg#*=}"
@@ -323,6 +327,7 @@ for arg in "$@"; do
             echo "  --password-file=PATH  Override the Restic password file"
             echo "  --role=R     Override auto-detected role (workstation|server)"
             echo "  --env        Print resolved configuration and exit"
+            echo "  --no-color   Disable colored output"
             exit 0
             ;;
         --version)
@@ -373,6 +378,10 @@ if [ "$COUNT_LOCAL" = true ]; then
     n=$(timeout 120 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq 'length' 2>/dev/null || echo 0)
     echo "$n"
     exit 0
+fi
+
+if [ "$NO_COLOR" = true ]; then
+    RED=""; GREEN=""; YELLOW=""; BLUE=""; BOLD=""; NC=""
 fi
 
 if [ "$PRINT_ENV" = true ]; then
