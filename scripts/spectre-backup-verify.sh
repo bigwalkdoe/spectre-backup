@@ -55,6 +55,14 @@ for arg in "$@"; do
             echo "  --role=  Override auto-detected role (workstation|server)"
             exit 0
             ;;
+        --version)
+            if git -C "$PROJECT_DIR" describe --tags --always >/dev/null 2>&1; then
+                echo "spectre-backup $(git -C "$PROJECT_DIR" describe --tags --always 2>/dev/null)"
+            else
+                echo "spectre-backup (dev)"
+            fi
+            exit 0
+            ;;
     esac
 done
 
