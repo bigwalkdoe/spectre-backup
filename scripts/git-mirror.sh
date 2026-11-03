@@ -147,8 +147,10 @@ if [ "$failed" -eq 0 ]; then
     rm -f "$live_names"
 fi
 
-printf 'git mirror: %d cloned, %d refreshed, %d skipped, %d failed -> %s\n' \
-    "$mirrored" "$refreshed" "$skipped" "$failed" "$DEST"
+if [ "${QUIET:-false}" != true ]; then
+    printf 'git mirror: %d cloned, %d refreshed, %d skipped, %d failed -> %s\n' \
+        "$mirrored" "$refreshed" "$skipped" "$failed" "$DEST"
+fi
 
 # Non-zero exit only on real failures. Skipped repositories are reported but do
 # not fail the run: the mirror is still consistent for everything else, and the
