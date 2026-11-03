@@ -283,6 +283,16 @@ for arg in "$@"; do
         --debug|--trace)
             DEBUG=true
             ;;
+        --role=*)
+            ROLE="${arg#*=}"
+            if [ "$ROLE" = "server" ]; then
+                CONFIG_DIR="/etc/spectre-backup"
+            else
+                CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/spectre-backup"
+            fi
+            STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
+            load_env || true
+            ;;
         --count)
             COUNT_ONLY=true
             ;;
@@ -307,6 +317,7 @@ for arg in "$@"; do
             echo "  --count      Print snapshot count for the offsite repository and exit"
             echo "  --count-local Print snapshot count for the local repository and exit"
             echo "  --password-file=PATH  Override the Restic password file"
+            echo "  --role=R     Override auto-detected role (workstation|server)"
             exit 0
             ;;
         --version)
