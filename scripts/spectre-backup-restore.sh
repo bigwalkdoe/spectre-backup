@@ -97,10 +97,17 @@ for cmd in restic rclone; do
     fi
 done
 
-if ! rclone listremotes 2>/dev/null | grep -q "^spectre-backup:"; then
-    error "rclone remote 'spectre-backup:' not found"
-    echo "Run: rclone config"
-    exit 1
+# Derive the rclone remote name from RESTIC_REPOSITORY (rclone:<name>:...).
+RESTORE_REMOTE=""
+case "$RESTIC_REPOSITORY" in
+    rclone:*) RESTORE_REMOTE="${RESTIC_REPOSITORY#rclone:}"; RESTORE_REMOTE="${RESTORE_REMOTE%%:*}" ;;
+esac
+if [ -n "$RESTORE_REMOTE" ]; then
+    if ! rclone listremotes 2>/dev/null | grep -q "^${RESTORE_REMOTE}:"; then
+        error "rclone remote '${RESTORE_REMOTE}:' not found"
+        echo "Run: rclone config"
+        exit 1
+    fi
 fi
 
 # --- Test repository access ---
