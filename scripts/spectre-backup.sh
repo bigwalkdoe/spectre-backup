@@ -253,6 +253,7 @@ LIST_SNAPSHOTS=false
 LIST_LOCAL=false
 QUIET=false
 JSON_OUTPUT=false
+DEBUG=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -277,6 +278,9 @@ for arg in "$@"; do
         --json)
             JSON_OUTPUT=true
             ;;
+        --debug)
+            DEBUG=true
+            ;;
         --help|-h)
             echo "Usage: $0 [--health [--json]] [--no-prune] [--no-notify]"
             echo ""
@@ -288,6 +292,7 @@ for arg in "$@"; do
             echo "  --list-local List snapshots in the local repository"
             echo "  --quiet      Suppress informational output"
             echo "  --json       Print a JSON summary at the end"
+            echo "  --debug      Enable shell tracing (set -x)"
             exit 0
             ;;
         --version)
@@ -319,6 +324,8 @@ if [ "$LIST_LOCAL" = true ]; then
     timeout 120 restic -r "$RESTIC_REPOSITORY_LOCAL" snapshots --json 2>/dev/null | jq -r 'sort_by(.time) | reverse | .[] | "\(.short_id)  \(.time)  [\(.tags // [] | join(","))]"'
     exit 0
 fi
+
+if [ "$DEBUG" = true ]; then set -x; fi
 
 header "Pre-flight checks ($DISTRO_ID $DISTRO_VERSION_ID, role=$ROLE)"
 
