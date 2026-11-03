@@ -289,6 +289,9 @@ for arg in "$@"; do
         --count-local)
             COUNT_LOCAL=true
             ;;
+        --password-file=*)
+            RESTIC_PASSWORD_FILE="${arg#*=}"
+            ;;
         --help|-h)
             echo "Usage: $0 [--health [--json]] [--no-prune] [--no-notify]"
             echo ""
@@ -303,6 +306,7 @@ for arg in "$@"; do
             echo "  --debug      Enable shell tracing (set -x)"
             echo "  --count      Print snapshot count for the offsite repository and exit"
             echo "  --count-local Print snapshot count for the local repository and exit"
+            echo "  --password-file=PATH  Override the Restic password file"
             exit 0
             ;;
         --version)
