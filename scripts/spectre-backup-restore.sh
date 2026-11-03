@@ -50,11 +50,13 @@ RESTORE_SNAPSHOT="latest"
 DRY_RUN=false
 JUST_LIST=false
 
+USE_LOCAL=false
 for arg in "$@"; do
     case "$arg" in
         --list|--snapshots) JUST_LIST=true ;;
         --snapshot=*) RESTORE_SNAPSHOT="${arg#*=}" ;;
         --dry-run) DRY_RUN=true ;;
+        --local) USE_LOCAL=true ;;
         --role=*) SPECTRE_BACKUP_ROLE="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [--list] [--snapshot=<id>] [--dry-run] [--role=workstation|server]"
@@ -62,6 +64,7 @@ for arg in "$@"; do
             echo "  --list         List all snapshots"
             echo "  --snapshot=<id> Restore specific snapshot (default: latest)"
             echo "  --dry-run      Show what would be restored without doing it"
+            echo "  --local        Restore from the local repository (RESTIC_REPOSITORY_LOCAL)"
             echo "  --role=        Override auto-detected role (workstation|server)"
             exit 0
             ;;
@@ -73,6 +76,14 @@ if [ -f "$CONFIG_DIR/.env" ]; then
     set -a; source "$CONFIG_DIR/.env"; set +a
 fi
 RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-rclone:spectre-backup:}"
+if [ "$USE_LOCAL" = true ]; then
+    if [ -z "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
+        error "--local requested but RESTIC_REPOSITORY_LOCAL is not configured"
+        exit 1
+    fi
+    RESTIC_REPOSITORY="$RESTIC_REPOSITORY_LOCAL"
+    info "Restoring from local repository: $RESTIC_REPOSITORY"
+fi
 export RESTIC_PASSWORD_COMMAND="cat $RESTIC_PASSWORD_FILE"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/spectre-backup"
 LOG_DIR="${LOG_DIR:-$STATE_DIR}"
