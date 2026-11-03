@@ -109,13 +109,21 @@ if [ ! -f "$RESTIC_PASSWORD_FILE" ]; then
     exit 1
 fi
 
-for cmd in restic rclone; do
+for cmd in restic; do
     if ! check_cmd "$cmd"; then
         error "Required command not found: $cmd"
         echo "Install: sudo $PKG_MANAGER install -y $cmd"
         exit 1
     fi
 done
+# rclone is only required for rclone-backed repositories.
+if [[ "$RESTIC_REPOSITORY" == rclone:* ]]; then
+    if ! check_cmd rclone; then
+        error "Required command not found: rclone"
+        echo "Install: sudo $PKG_MANAGER install -y rclone"
+        exit 1
+    fi
+fi
 
 # Derive the rclone remote name from RESTIC_REPOSITORY (rclone:<name>:...).
 RESTORE_REMOTE=""
