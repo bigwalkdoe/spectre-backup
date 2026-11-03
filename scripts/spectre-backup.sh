@@ -149,7 +149,7 @@ health_check() {
         used_pct=$(timeout 60 rclone about "${REMOTE_NAME}:" 2>/dev/null | grep -oP 'Used:.*?([0-9.]+)%' | grep -oP '([0-9.]+)%' | tr -d '%' | head -1 || true)
     fi
 
-    local local_status="ok" off_status="ok" disk_status="ok" quota_status="ok" locks_status="ok"
+    local local_status="ok" off_status="ok" disk_status="ok" quota_status="ok" locks_status="ok" config_status="ok"
 
     # SLOs: local <=26h ok (daily timer + randomised delay), >26h deg, >48h fail
     if [ $local_age_h -gt 48 ]; then local_status="fail"; overall=$rc_fail
@@ -171,6 +171,13 @@ health_check() {
         fi
     fi
 
+    # config: password file readable, include file present
+    if [ ! -r "${RESTIC_PASSWORD_FILE:-}" ]; then
+        config_status="fail"; overall=$rc_fail
+    elif [ -n "${INCLUDE_FILE:-}" ] && [ ! -f "$INCLUDE_FILE" ]; then
+        config_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
+    fi
+
     # One status word for both output formats (0=ok, 1=degraded, 2=failed)
     local status_word status_label
     case $overall in
@@ -190,7 +197,7 @@ health_check() {
   "offsite": {"count": $off_count, "newest_iso": "$off_newest_iso", "age_hours": $off_age_h, "status": "$off_status"},
   "disk_free_g": $local_free_g, "disk_status": "$disk_status",
   "quota_used_pct": $( [ -n "$used_pct" ] && echo "$used_pct" || echo null ), "quota_status": "$quota_status",
-  "locks_status": "$locks_status"
+  "locks_status": "$locks_status", "config_status": "$config_status"
 }
 JSON
         return $overall
@@ -202,6 +209,7 @@ JSON
         echo "  offsite: count=$off_count age_h=$off_age_h status=$off_status (newest=$off_newest_iso)"
         echo "  disk:    free_g=$local_free_g status=$disk_status"
         echo "  quota:   used_pct=${used_pct:-n/a} status=$quota_status"
+        echo "  config:  status=$config_status"
         return $overall
     fi
 }

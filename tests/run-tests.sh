@@ -758,6 +758,7 @@ RESTIC_REPOSITORY_LOCAL="$SANDBOX/repo"
 NOTIFY_ENABLED="false"
 EOF
     printf 'test-password\n' > "$SANDBOX/config/spectre-backup/password"
+    printf '/tmp\n' > "$SANDBOX/config/spectre-backup/include.conf"
     # restic stub: a snapshot aged LOCAL_AGE_H for the local repo, OFF_AGE_H
     # for the offsite repo.
     cat > "$SANDBOX/stubbin/restic" <<EOF
