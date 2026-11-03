@@ -23,6 +23,7 @@ NO_MIGRATE=false
 INIT_REPO=""
 FORCE_OVERWRITE=false
 QUIET=false
+DEBUG=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -35,6 +36,7 @@ for arg in "$@"; do
         --repo=*) INIT_REPO="${arg#*=}" ;;
         --force) FORCE_OVERWRITE=true ;;
         --quiet) QUIET=true ;;
+        --debug) DEBUG=true ;;
         --help|-h)
             echo "Usage: $0 [--role=workstation|server] [--bin-only] [--skip-test]"
             echo ""
@@ -46,6 +48,7 @@ for arg in "$@"; do
             echo "  --repo=URL          Set initial RESTIC_REPOSITORY"
             echo "  --force             Overwrite existing config files"
             echo "  --quiet             Suppress informational output"
+            echo "  --debug             Enable shell tracing (set -x)"
             exit 0
             ;;
         --version)
@@ -64,6 +67,7 @@ for arg in "$@"; do
 done
 
 # --- Interactive mode ---
+if [ "${DEBUG:-false}" = true ]; then set -x; fi
 INTERACTIVE=true
 [ -t 0 ] || INTERACTIVE=false
 
