@@ -252,6 +252,7 @@ NO_PRUNE=false
 LIST_SNAPSHOTS=false
 LIST_LOCAL=false
 QUIET=false
+JSON_OUTPUT=false
 for arg in "$@"; do
     case "$arg" in
         --health|health)
@@ -273,6 +274,9 @@ for arg in "$@"; do
         --quiet)
             QUIET=true
             ;;
+        --json)
+            JSON_OUTPUT=true
+            ;;
         --help|-h)
             echo "Usage: $0 [--health [--json]] [--no-prune] [--no-notify]"
             echo ""
@@ -283,6 +287,7 @@ for arg in "$@"; do
             echo "  --list       List snapshots in the offsite repository"
             echo "  --list-local List snapshots in the local repository"
             echo "  --quiet      Suppress informational output"
+            echo "  --json       Print a JSON summary at the end"
             exit 0
             ;;
         --version)
@@ -709,6 +714,12 @@ elif [ -f "$SCRIPT_DIR/spectre-backup-prune.sh" ]; then
     bash "$SCRIPT_DIR/spectre-backup-prune.sh" --no-notify || warn "Prune completed with warnings"
 else
     warn "Prune script not found - skipping automatic pruning"
+fi
+
+if [ "${JSON_OUTPUT:-false}" = true ]; then
+    cat <<JSON
+{"status": "ok", "distro": "$DISTRO_ID", "role": "$ROLE", "repository": "$RESTIC_REPOSITORY", "snapshot_id": "$SNAPSHOT_ID", "repo_size": "$REPO_SIZE", "duration_s": $DURATION}
+JSON
 fi
 
 exit 0
