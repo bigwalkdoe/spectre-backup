@@ -280,7 +280,7 @@ for arg in "$@"; do
         --json)
             JSON_OUTPUT=true
             ;;
-        --debug)
+        --debug|--trace)
             DEBUG=true
             ;;
         --count)
