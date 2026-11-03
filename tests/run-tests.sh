@@ -775,6 +775,8 @@ echo "fake 104857600 1048576 103809024 1% /"
 EOF
     cat > "$SANDBOX/stubbin/rclone" <<'EOF'
 #!/bin/bash
+if [ "$1" = "listremotes" ]; then echo "fake-remote:"; exit 0; fi
+if [ "$1" = "lsd" ]; then exit 0; fi
 [ "$1" = "about" ] && echo "Used:  10%"
 exit 0
 EOF

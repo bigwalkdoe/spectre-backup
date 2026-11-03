@@ -149,7 +149,7 @@ health_check() {
         used_pct=$(timeout 60 rclone about "${REMOTE_NAME}:" 2>/dev/null | grep -oP 'Used:.*?([0-9.]+)%' | grep -oP '([0-9.]+)%' | tr -d '%' | head -1 || true)
     fi
 
-    local local_status="ok" off_status="ok" disk_status="ok" quota_status="ok" locks_status="ok" config_status="ok"
+    local local_status="ok" off_status="ok" disk_status="ok" quota_status="ok" locks_status="ok" config_status="ok" remote_status="ok"
 
     # SLOs: local <=26h ok (daily timer + randomised delay), >26h deg, >48h fail
     if [ $local_age_h -gt 48 ]; then local_status="fail"; overall=$rc_fail
@@ -178,6 +178,18 @@ health_check() {
         config_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
     fi
 
+    # remote availability (rclone)
+    # Determine backend from RESTIC_REPOSITORY
+    _backend="${RESTIC_REPOSITORY%%:*}"
+    if [ "$_backend" = "rclone" ]; then
+        _remote="${RESTIC_REPOSITORY#*:}"; _remote="${_remote%%:*}"
+        if ! timeout 30 rclone listremotes 2>/dev/null | grep -q "^${_remote}:"; then
+            remote_status="fail"; overall=$rc_fail
+        elif ! timeout 30 rclone lsd "${_remote}:" >/dev/null 2>&1; then
+            remote_status="degraded"; [ $overall -eq $rc_ok ] && overall=$rc_deg
+        fi
+    fi
+
     # One status word for both output formats (0=ok, 1=degraded, 2=failed)
     local status_word status_label
     case $overall in
@@ -197,7 +209,7 @@ health_check() {
   "offsite": {"count": $off_count, "newest_iso": "$off_newest_iso", "age_hours": $off_age_h, "status": "$off_status"},
   "disk_free_g": $local_free_g, "disk_status": "$disk_status",
   "quota_used_pct": $( [ -n "$used_pct" ] && echo "$used_pct" || echo null ), "quota_status": "$quota_status",
-  "locks_status": "$locks_status", "config_status": "$config_status"
+  "locks_status": "$locks_status", "config_status": "$config_status", "remote_status": "$remote_status"
 }
 JSON
         return $overall
@@ -210,6 +222,7 @@ JSON
         echo "  disk:    free_g=$local_free_g status=$disk_status"
         echo "  quota:   used_pct=${used_pct:-n/a} status=$quota_status"
         echo "  config:  status=$config_status"
+        echo "  remote:  status=$remote_status"
         return $overall
     fi
 }
