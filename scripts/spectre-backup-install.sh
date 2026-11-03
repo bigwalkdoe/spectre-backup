@@ -19,6 +19,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ROLE=""
 INSTALL_BIN_ONLY=false
 SKIP_TEST=false
+NO_MIGRATE=false
 FORCE_OVERWRITE=false
 QUIET=false
 
@@ -29,6 +30,7 @@ for arg in "$@"; do
         --server) ROLE="server" ;;
         --bin-only) INSTALL_BIN_ONLY=true ;;
         --skip-test) SKIP_TEST=true ;;
+        --no-migrate) NO_MIGRATE=true ;;
         --force) FORCE_OVERWRITE=true ;;
         --quiet) QUIET=true ;;
         --help|-h)
@@ -38,6 +40,7 @@ for arg in "$@"; do
             echo "  --role=server       Install as a server (system systemd service, no notifications)"
             echo "  --bin-only          Install scripts only, skip config and systemd"
             echo "  --skip-test         Skip the test backup prompt"
+            echo "  --no-migrate        Skip legacy install migration"
             echo "  --force             Overwrite existing config files"
             echo "  --quiet             Suppress informational output"
             exit 0
@@ -83,6 +86,8 @@ fi
 # Legacy rename migration (before resolve_dirs so detection sees real state)
 if [ "$INSTALL_BIN_ONLY" = true ]; then
     info "Skipping legacy migration (--bin-only)"
+elif [ "$NO_MIGRATE" = true ]; then
+    info "Skipping legacy migration (--no-migrate)"
 else
     header "Step 0: Migrating legacy install (if any)"
     migrate_legacy_install
