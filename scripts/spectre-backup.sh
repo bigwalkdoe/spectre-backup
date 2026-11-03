@@ -476,7 +476,7 @@ REPO_FAILED=0
 # Make sure a repository exists before backing up to it.
 ensure_repo_initialized() {
     local repo="$1" label="$2"
-    if restic -r "$repo" cat config >/dev/null 2>&1; then
+    if timeout 120 restic -r "$repo" cat config >/dev/null 2>&1; then
         return 0
     fi
     info "[$label] No repository at $repo -- initialising"
@@ -484,7 +484,7 @@ ensure_repo_initialized() {
         info "[$label] Repository initialised"
         return 0
     fi
-    if restic -r "$repo" cat config >/dev/null 2>&1; then
+    if timeout 120 restic -r "$repo" cat config >/dev/null 2>&1; then
         return 0
     fi
     error "[$label] Cannot initialise or read a repository at $repo"
