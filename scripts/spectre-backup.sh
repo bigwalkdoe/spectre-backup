@@ -545,10 +545,20 @@ info "Filesystem backup complete"
 # ============================================================
 header "Phase 4: Repository integrity check"
 
+INTEGRITY_FAILED=0
+
 set +e
 restic -r "$RESTIC_REPOSITORY" -o "rclone.program=rclone --tpslimit 2 --drive-chunk-size 64M" check --no-lock 2>&1
 CHECK_EXIT=$?
 set -e
+
+if [ $CHECK_EXIT -ne 0 ]; then
+    error "Offsite repository integrity check FAILED"
+    notify "Backup Failed" "Offsite repository integrity check failed - run verify.sh" "critical"
+    INTEGRITY_FAILED=1
+else
+    info "Offsite repository integrity check passed"
+fi
 
 if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
     set +e
@@ -557,17 +567,16 @@ if [ -n "${RESTIC_REPOSITORY_LOCAL:-}" ]; then
     set -e
     if [ $LOCAL_CHECK_EXIT -ne 0 ]; then
         error "Local repository integrity check FAILED"
-        notify "Backup Warning" "Local repository integrity check failed" "critical"
+        notify "Backup Failed" "Local repository integrity check failed - run verify.sh" "critical"
+        INTEGRITY_FAILED=1
     else
         info "Local repository integrity check passed"
     fi
 fi
 
-if [ $CHECK_EXIT -ne 0 ]; then
-    error "Repository integrity check FAILED"
-    notify "Backup Warning" "Repository integrity check failed - run verify.sh" "critical"
-else
-    info "Repository integrity check passed"
+if [ "$INTEGRITY_FAILED" -ne 0 ]; then
+    error "Repository integrity check FAILED -- backup is not considered successful"
+    exit 1
 fi
 
 # ============================================================
