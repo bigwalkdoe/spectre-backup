@@ -467,7 +467,8 @@ if [ -f "$EXCLUDE_FILE" ] && [ -s "$EXCLUDE_FILE" ]; then
     RESTIC_COMMON_ARGS+=(--exclude-file "$EXCLUDE_FILE")
 fi
 
-RESTIC_COMMON_ARGS+=(--exclude "$DUMPS_DIR") # exclude from general backup pattern scanning
+# Dumps are added as an explicit target above; do not exclude them globally,
+# otherwise PostgreSQL/container dumps are never captured in the snapshot.
 
 info "Starting backup of ${#BACKUP_TARGETS[@]} target paths..."
 
